@@ -19,6 +19,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
 import UploadReceiptPage from "./pages/UploadReceiptPage";
 import NotFound from "./pages/NotFound";
+import OnboardingPage from "./components/onboarding/OnboardingPage";
 
 const queryClient = new QueryClient();
 
@@ -35,12 +36,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function DashboardRoute() {
   const { user } = useUser();
-  
+
   if (!user) return null;
-  
+
   // Check user metadata for role, default to restaurant
   const role = (user.publicMetadata?.role as string) || 'restaurant';
-  
+
   return role === 'restaurant' ? <RestaurantDashboard /> : <SupplierDashboard />;
 }
 
@@ -58,7 +59,7 @@ function AppRoutes() {
           </SignedOut>
         </>
       } />
-      
+
       {/* Auth routes with Clerk */}
       <Route path="/login/*" element={
         <>
@@ -80,7 +81,7 @@ function AppRoutes() {
           </SignedOut>
         </>
       } />
-      
+
       {/* Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
       <Route path="/deliveries" element={<ProtectedRoute><DeliveriesPage /></ProtectedRoute>} />
@@ -88,14 +89,16 @@ function AppRoutes() {
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/upload-receipt" element={<ProtectedRoute><UploadReceiptPage /></ProtectedRoute>} />
-      
       {/* Supplier routes */}
       <Route path="/reports" element={<ProtectedRoute><SupplierDashboard /></ProtectedRoute>} />
       <Route path="/clients" element={<ProtectedRoute><SupplierDashboard /></ProtectedRoute>} />
       <Route path="/performance" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-      
+
+      {/* Onboarding */}
+      <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
+
       <Route path="*" element={<NotFound />} />
-    </Routes>
+    </Routes >
   );
 }
 

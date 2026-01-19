@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Package, Clock, Euro, Building2, Plus } from 'lucide-react';
+import { Package, Clock, Euro, Building2, Plus, HelpCircle, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -37,31 +37,56 @@ export default function RestaurantDashboard() {
             Welcome back, {user.companyName}!
           </p>
         </div>
-        <Button onClick={() => navigate('/upload-receipt')}>
-          <Plus size={18} />
-          Upload Receipt
-        </Button>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="lg"
+            className="h-14 px-6 text-lg"
+          >
+            <Search className="w-5 h-5 mr-2" />
+            Search
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              localStorage.setItem('force_show_onboarding', 'true');
+              localStorage.removeItem('deliveri_onboarding_completed');
+              navigate('/onboarding');
+            }}
+            size="lg"
+            className="h-14 px-6 text-lg"
+          >
+            <HelpCircle className="w-5 h-5 mr-2" />
+            Onboarding
+          </Button>
+          <Button
+            onClick={() => navigate('/upload-receipt')}
+            size="lg"
+            className="h-14 px-8 text-lg shadow-lg hover:shadow-xl transition-all"
+          >
+            <Plus className="w-6 h-6 mr-2" />
+            Upload Receipt
+          </Button>
+        </div>
       </div>
 
       {/* Tab Switcher */}
       <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit mb-8">
         <button
           onClick={() => setActiveTab('deliveries')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'deliveries'
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'deliveries'
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
-          }`}
+            }`}
         >
           Deliveries
         </button>
         <button
           onClick={() => setActiveTab('financial')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'financial'
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'financial'
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
-          }`}
+            }`}
         >
           Financial Overview
         </button>
@@ -99,7 +124,7 @@ export default function RestaurantDashboard() {
         <h2 className="text-lg font-semibold text-foreground mb-4">
           Pending Verifications
         </h2>
-        
+
         {pendingDeliveries.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pendingDeliveries.map((delivery) => (

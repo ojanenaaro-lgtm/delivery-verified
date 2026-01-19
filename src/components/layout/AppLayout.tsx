@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { UserButton } from '@clerk/clerk-react';
 import {
@@ -14,6 +14,7 @@ import {
   Utensils,
   Menu,
   X,
+  HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,7 +49,14 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleViewOnboarding = () => {
+    localStorage.setItem('force_show_onboarding', 'true');
+    localStorage.removeItem('deliveri_onboarding_completed');
+    navigate('/onboarding');
+  };
 
   if (!user) return null;
 
@@ -123,8 +131,15 @@ export function AppLayout({ children }: AppLayoutProps) {
         </nav>
 
         {/* User Section */}
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3">
+        <div className="p-4 border-t border-border space-y-2">
+          <button
+            onClick={handleViewOnboarding}
+            className="flex items-center gap-3 w-full px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+          >
+            <HelpCircle size={20} />
+            Onboarding
+          </button>
+          <div className="flex items-center gap-3 pt-2 border-t border-border">
             <UserButton
               afterSignOutUrl="/"
               appearance={{
