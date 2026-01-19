@@ -6,13 +6,14 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { UserRoleProvider } from "./contexts/UserRoleContext";
+import { AppLayout } from "./components/layout/AppLayout";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import RestaurantDashboard from "./pages/dashboard/RestaurantDashboard";
-import SupplierDashboard from "./pages/dashboard/SupplierDashboard";
 import DeliveriesPage from "./pages/DeliveriesPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
@@ -20,6 +21,17 @@ import SettingsPage from "./pages/SettingsPage";
 import UploadReceiptPage from "./pages/UploadReceiptPage";
 import NotFound from "./pages/NotFound";
 import OnboardingPage from "./components/onboarding/OnboardingPage";
+
+// Supplier Pages
+import {
+  SupplierDashboard,
+  IncomingOrders,
+  OutgoingDeliveries,
+  DeliveryIssues,
+  ProductCatalog,
+  ConnectedRestaurants,
+  SupplierAnalytics
+} from "./pages/supplier";
 
 const queryClient = new QueryClient();
 
@@ -42,7 +54,7 @@ function DashboardRoute() {
   // Check user metadata for role, default to restaurant
   const role = (user.publicMetadata?.role as string) || 'restaurant';
 
-  return role === 'restaurant' ? <RestaurantDashboard /> : <SupplierDashboard />;
+  return role === 'restaurant' ? <RestaurantDashboard /> : <AppLayout><SupplierDashboard /></AppLayout>;
 }
 
 function AppRoutes() {
@@ -89,10 +101,15 @@ function AppRoutes() {
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/upload-receipt" element={<ProtectedRoute><UploadReceiptPage /></ProtectedRoute>} />
+
       {/* Supplier routes */}
-      <Route path="/reports" element={<ProtectedRoute><SupplierDashboard /></ProtectedRoute>} />
-      <Route path="/clients" element={<ProtectedRoute><SupplierDashboard /></ProtectedRoute>} />
-      <Route path="/performance" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+      <Route path="/supplier/dashboard" element={<ProtectedRoute><AppLayout><SupplierDashboard /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/orders" element={<ProtectedRoute><AppLayout><IncomingOrders /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/deliveries" element={<ProtectedRoute><AppLayout><OutgoingDeliveries /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/issues" element={<ProtectedRoute><AppLayout><DeliveryIssues /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/products" element={<ProtectedRoute><AppLayout><ProductCatalog /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/restaurants" element={<ProtectedRoute><AppLayout><ConnectedRestaurants /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/analytics" element={<ProtectedRoute><AppLayout><SupplierAnalytics /></AppLayout></ProtectedRoute>} />
 
       {/* Onboarding */}
       <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
@@ -106,13 +123,15 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
+        <UserRoleProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </UserRoleProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

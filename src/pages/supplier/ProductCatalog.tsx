@@ -1,0 +1,23 @@
+import { ClipboardList } from 'lucide-react';
+import MainContent from '@/components/layout/MainContent';
+import { Card, CardContent } from '@/components/ui/card';
+
+export default function ProductCatalog() {
+    return (
+        <MainContent>
+            <div className="max-w-7xl mx-auto">
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-foreground mb-2">Product Catalog</h1>
+                    <p className="text-muted-foreground">Manage your products and prices</p>
+                </div>
+                <Card>
+                    <CardContent className="py-12 text-center">
+                        <ClipboardList className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground mb-2">Empty catalog</h3>
+                        <p className="text-muted-foreground">Add products to your catalog to start selling</p>
+                    </CardContent>
+                </Card>
+            </div>
+        </MainContent>
+    );
+}

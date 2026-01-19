@@ -10,7 +10,7 @@ const FloatingIcons = () => (
     <div className="absolute top-20 left-10 w-64 h-64 bg-white/5 rounded-full blur-3xl animate-pulse" />
     <div className="absolute bottom-20 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
     <div className="absolute top-1/2 left-1/4 w-48 h-48 bg-white/5 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '4s' }} />
-    
+
     {/* Floating icons - hidden on mobile */}
     <div className="absolute top-32 right-[15%] text-white/10 animate-float hidden lg:block">
       <Package className="w-16 h-16" />
@@ -61,7 +61,12 @@ export default function LandingPage() {
               <Button variant="ghost">Log in</Button>
             </Link>
             <Link to="/signup">
-              <Button>Get Started</Button>
+              <Button variant="outline">Sign up</Button>
+            </Link>
+            <Link to="/signup">
+              <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold shadow-lg shadow-blue-500/20 border border-white/10">
+                2 week free trial
+              </Button>
             </Link>
           </div>
         </div>
@@ -70,7 +75,7 @@ export default function LandingPage() {
       {/* Hero Section - Animated */}
       <section className="relative min-h-[90vh] hero-gradient-animated overflow-hidden flex items-center">
         <FloatingIcons />
-        
+
         {/* Dot pattern overlay */}
         <div className="absolute inset-0 dot-pattern" />
 
@@ -94,7 +99,8 @@ export default function LandingPage() {
                   <ArrowRight size={18} />
                 </Button>
               </Link>
-              <button 
+
+              <button
                 onClick={scrollToFeatures}
                 className="text-white/80 hover:text-white font-medium text-lg transition-colors"
               >
