@@ -39,6 +39,7 @@ export default function RestaurantDashboard() {
   return (
     <AppLayout>
       {/* Header */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
@@ -46,8 +47,12 @@ export default function RestaurantDashboard() {
             Welcome back, {user.companyName}!
           </p>
         </div>
-        <Button onClick={() => setUploadModalOpen(true)}>
-          <Plus size={18} />
+        <Button
+          onClick={() => setUploadModalOpen(true)}
+          size="lg"
+          className="h-14 px-8 text-lg shadow-lg hover:shadow-xl transition-all"
+        >
+          <Plus className="w-6 h-6 mr-2" />
           Upload Receipt
         </Button>
       </div>
@@ -56,21 +61,19 @@ export default function RestaurantDashboard() {
       <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit mb-8">
         <button
           onClick={() => setActiveTab('deliveries')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'deliveries'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'deliveries'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:text-foreground'
+            }`}
         >
           Deliveries
         </button>
         <button
           onClick={() => setActiveTab('financial')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'financial'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'financial'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:text-foreground'
+            }`}
         >
           Financial Overview
         </button>
@@ -108,7 +111,7 @@ export default function RestaurantDashboard() {
         <h2 className="text-lg font-semibold text-foreground mb-4">
           Pending Verifications
         </h2>
-        
+
         {pendingDeliveries.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pendingDeliveries.map((delivery) => (

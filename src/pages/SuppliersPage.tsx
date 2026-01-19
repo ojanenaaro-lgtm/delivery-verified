@@ -2,7 +2,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { MOCK_SUPPLIERS } from '@/data/mockData';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Mail, Phone, TrendingUp, ExternalLink } from 'lucide-react';
+import { Mail, Phone, TrendingUp, ExternalLink, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function SuppliersPage() {
@@ -40,8 +40,8 @@ export default function SuppliersPage() {
                   {getAccuracyBadge(supplier.accuracyRate)}
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-2xl">
-                📦
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Package className="w-6 h-6 text-primary" />
               </div>
             </div>
 

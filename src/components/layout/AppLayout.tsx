@@ -11,6 +11,7 @@ import {
   ClipboardList,
   UtensilsCrossed,
   TrendingUp,
+  Utensils,
   Menu,
   X,
 } from 'lucide-react';
@@ -51,8 +52,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   if (!user) return null;
 
+
   const navItems = user.role === 'restaurant' ? restaurantNavItems : supplierNavItems;
-  const roleIcon = user.role === 'restaurant' ? '🍽️' : '📦';
   const roleLabel = user.role === 'restaurant' ? 'RESTAURANT' : 'SUPPLIER';
 
   return (
@@ -80,7 +81,15 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Role Indicator Card */}
         <div className="px-4 pb-4">
           <div className="bg-background-elevated rounded-xl p-4 border border-border">
-            <div className="text-3xl mb-2">{roleIcon}</div>
+            {user.role === 'restaurant' ? (
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <Utensils className="w-6 h-6 text-primary" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <Package className="w-6 h-6 text-primary" />
+              </div>
+            )}
             <div className="text-xs font-semibold text-muted-foreground tracking-wider">
               {roleLabel}
             </div>
@@ -116,7 +125,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* User Section */}
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3">
-            <UserButton 
+            <UserButton
               afterSignOutUrl="/"
               appearance={{
                 elements: {
