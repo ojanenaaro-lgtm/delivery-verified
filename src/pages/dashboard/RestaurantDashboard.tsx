@@ -5,16 +5,13 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DeliveryCard } from '@/components/dashboard/DeliveryCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
-import { UploadReceiptModal } from '@/components/modals/UploadReceiptModal';
 import { Button } from '@/components/ui/button';
-import { MOCK_DELIVERIES, getPendingDeliveries, Delivery, DeliveryItem } from '@/data/mockData';
+import { MOCK_DELIVERIES, getPendingDeliveries, Delivery } from '@/data/mockData';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 
 export default function RestaurantDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'deliveries' | 'financial'>('deliveries');
 
   if (!user) return null;
@@ -30,15 +27,8 @@ export default function RestaurantDashboard() {
     navigate(`/deliveries/${delivery.id}/verify`);
   };
 
-  const handleUploadComplete = (items: DeliveryItem[], supplierId: string, orderNumber: string) => {
-    toast.success('Verification complete!', {
-      description: 'The report has been sent to the supplier.',
-    });
-  };
-
   return (
     <AppLayout>
-      {/* Header */}
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -47,12 +37,8 @@ export default function RestaurantDashboard() {
             Welcome back, {user.companyName}!
           </p>
         </div>
-        <Button
-          onClick={() => setUploadModalOpen(true)}
-          size="lg"
-          className="h-14 px-8 text-lg shadow-lg hover:shadow-xl transition-all"
-        >
-          <Plus className="w-6 h-6 mr-2" />
+        <Button onClick={() => navigate('/upload-receipt')}>
+          <Plus size={18} />
           Upload Receipt
         </Button>
       </div>
@@ -61,19 +47,21 @@ export default function RestaurantDashboard() {
       <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit mb-8">
         <button
           onClick={() => setActiveTab('deliveries')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'deliveries'
-            ? 'bg-background text-foreground shadow-sm'
-            : 'text-muted-foreground hover:text-foreground'
-            }`}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === 'deliveries'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
         >
           Deliveries
         </button>
         <button
           onClick={() => setActiveTab('financial')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'financial'
-            ? 'bg-background text-foreground shadow-sm'
-            : 'text-muted-foreground hover:text-foreground'
-            }`}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === 'financial'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
         >
           Financial Overview
         </button>
@@ -111,7 +99,7 @@ export default function RestaurantDashboard() {
         <h2 className="text-lg font-semibold text-foreground mb-4">
           Pending Verifications
         </h2>
-
+        
         {pendingDeliveries.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pendingDeliveries.map((delivery) => (
@@ -126,12 +114,6 @@ export default function RestaurantDashboard() {
           <EmptyState />
         )}
       </div>
-
-      <UploadReceiptModal
-        open={uploadModalOpen}
-        onClose={() => setUploadModalOpen(false)}
-        onComplete={handleUploadComplete}
-      />
     </AppLayout>
   );
 }

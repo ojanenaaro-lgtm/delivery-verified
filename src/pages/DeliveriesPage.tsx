@@ -1,18 +1,15 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Plus, Search, Filter, ChevronRight, Eye } from 'lucide-react';
+import { Plus, Search, ChevronRight, Eye } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { UploadReceiptModal } from '@/components/modals/UploadReceiptModal';
-import { MOCK_DELIVERIES, MOCK_SUPPLIERS, DeliveryItem } from '@/data/mockData';
+import { MOCK_DELIVERIES, MOCK_SUPPLIERS } from '@/data/mockData';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 
 export default function DeliveriesPage() {
   const navigate = useNavigate();
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
@@ -40,12 +37,6 @@ export default function DeliveriesPage() {
     }
   };
 
-  const handleUploadComplete = (items: DeliveryItem[], supplierId: string, orderNumber: string) => {
-    toast.success('Verification complete!', {
-      description: 'The report has been sent to the supplier.',
-    });
-  };
-
   return (
     <AppLayout>
       {/* Header */}
@@ -56,7 +47,7 @@ export default function DeliveriesPage() {
             Track and verify all your deliveries
           </p>
         </div>
-        <Button onClick={() => setUploadModalOpen(true)}>
+        <Button onClick={() => navigate('/upload-receipt')}>
           <Plus size={18} />
           Upload Receipt
         </Button>
@@ -183,12 +174,6 @@ export default function DeliveriesPage() {
           </div>
         )}
       </div>
-
-      <UploadReceiptModal
-        open={uploadModalOpen}
-        onClose={() => setUploadModalOpen(false)}
-        onComplete={handleUploadComplete}
-      />
     </AppLayout>
   );
 }
