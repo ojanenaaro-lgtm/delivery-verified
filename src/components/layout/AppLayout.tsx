@@ -1,0 +1,164 @@
+import { ReactNode } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import {
+  Home,
+  Package,
+  BarChart3,
+  Building2,
+  Settings,
+  LogOut,
+  ClipboardList,
+  UtensilsCrossed,
+  TrendingUp,
+  Menu,
+  X,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useAuth, UserRole } from '@/contexts/AuthContext';
+import { Logo } from '@/components/Logo';
+import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: ReactNode;
+}
+
+const restaurantNavItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: <Home size={20} /> },
+  { label: 'Deliveries', href: '/deliveries', icon: <Package size={20} /> },
+  { label: 'Analytics', href: '/analytics', icon: <BarChart3 size={20} /> },
+  { label: 'Suppliers', href: '/suppliers', icon: <Building2 size={20} /> },
+  { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
+];
+
+const supplierNavItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: <Home size={20} /> },
+  { label: 'Verification Reports', href: '/reports', icon: <ClipboardList size={20} /> },
+  { label: 'Restaurant Clients', href: '/clients', icon: <UtensilsCrossed size={20} /> },
+  { label: 'Performance', href: '/performance', icon: <TrendingUp size={20} /> },
+  { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
+];
+
+interface AppLayoutProps {
+  children: ReactNode;
+}
+
+export function AppLayout({ children }: AppLayoutProps) {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  if (!user) return null;
+
+  const navItems = user.role === 'restaurant' ? restaurantNavItems : supplierNavItems;
+  const roleIcon = user.role === 'restaurant' ? '🍽️' : '📦';
+  const roleLabel = user.role === 'restaurant' ? 'RESTAURANT' : 'SUPPLIER';
+
+  return (
+    <div className="flex min-h-screen w-full bg-background">
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        className="fixed top-4 left-4 z-50 lg:hidden p-2 rounded-lg bg-card border border-border"
+      >
+        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'fixed lg:sticky top-0 left-0 z-40 h-screen w-64 bg-background-secondary border-r border-border flex flex-col transition-transform duration-300',
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        )}
+      >
+        {/* Logo */}
+        <div className="p-6 pt-8">
+          <Logo showSubtitle />
+        </div>
+
+        {/* Role Indicator Card */}
+        <div className="px-4 pb-4">
+          <div className="bg-background-elevated rounded-xl p-4 border border-border">
+            <div className="text-3xl mb-2">{roleIcon}</div>
+            <div className="text-xs font-semibold text-muted-foreground tracking-wider">
+              {roleLabel}
+            </div>
+            <div className="text-sm font-medium text-foreground mt-0.5 truncate">
+              {user.companyName}
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User Section */}
+        <div className="p-4 border-t border-border">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+              {user.email.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate text-foreground">
+                {user.email}
+              </div>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="w-full justify-start text-muted-foreground hover:text-foreground"
+          >
+            <LogOut size={18} />
+            Logout
+          </Button>
+        </div>
+      </aside>
+
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Main Content */}
+      <main className="flex-1 min-w-0">
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+          className="p-6 lg:p-8"
+        >
+          {children}
+        </motion.div>
+      </main>
+    </div>
+  );
+}
