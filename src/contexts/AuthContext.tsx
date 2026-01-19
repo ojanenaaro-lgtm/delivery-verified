@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
+import { useUser, useClerk } from '@clerk/clerk-react';
 
 export type UserRole = 'restaurant' | 'supplier';
 
@@ -13,93 +14,33 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, role: UserRole, companyName: string) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demo
-const MOCK_USERS: User[] = [
-  {
-    id: '1',
-    email: 'piedu@savotta.fi',
-    role: 'restaurant',
-    companyName: 'Ravintola Savotta',
-    createdAt: new Date('2024-01-15'),
-  },
-  {
-    id: '2',
-    email: 'admin@kespro.fi',
-    role: 'supplier',
-    companyName: 'Kespro Oy',
-    createdAt: new Date('2024-01-10'),
-  },
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user: clerkUser, isLoaded } = useUser();
+  const { signOut } = useClerk();
 
-  useEffect(() => {
-    // Check for stored session
-    const storedUser = localStorage.getItem('deliveri_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
-  }, []);
-
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    const foundUser = MOCK_USERS.find((u) => u.email === email);
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('deliveri_user', JSON.stringify(foundUser));
-    } else {
-      // Create a demo user for any login attempt
-      const demoUser: User = {
-        id: Date.now().toString(),
-        email,
-        role: 'restaurant',
-        companyName: 'Demo Restaurant',
-        createdAt: new Date(),
-      };
-      setUser(demoUser);
-      localStorage.setItem('deliveri_user', JSON.stringify(demoUser));
-    }
-    setIsLoading(false);
-  };
-
-  const signup = async (email: string, password: string, role: UserRole, companyName: string) => {
-    setIsLoading(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    const newUser: User = {
-      id: Date.now().toString(),
-      email,
-      role,
-      companyName,
-      createdAt: new Date(),
-    };
-    
-    setUser(newUser);
-    localStorage.setItem('deliveri_user', JSON.stringify(newUser));
-    setIsLoading(false);
-  };
+  // Map Clerk user to our User type
+  // For now, we use publicMetadata for role/companyName, with defaults
+  const user: User | null = clerkUser
+    ? {
+        id: clerkUser.id,
+        email: clerkUser.primaryEmailAddress?.emailAddress || '',
+        role: (clerkUser.publicMetadata?.role as UserRole) || 'restaurant',
+        companyName: (clerkUser.publicMetadata?.companyName as string) || clerkUser.firstName || 'My Restaurant',
+        createdAt: new Date(clerkUser.createdAt || Date.now()),
+      }
+    : null;
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem('deliveri_user');
+    signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading: !isLoaded, logout }}>
       {children}
     </AuthContext.Provider>
   );

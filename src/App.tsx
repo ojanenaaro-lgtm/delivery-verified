@@ -3,7 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/clerk-react";
+import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
 // Pages
@@ -21,39 +22,63 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-  
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return <>{children}</>;
+  return (
+    <>
+      <SignedIn>{children}</SignedIn>
+      <SignedOut>
+        <RedirectToSignIn />
+      </SignedOut>
+    </>
+  );
 }
 
 function DashboardRoute() {
-  const { user } = useAuth();
+  const { user } = useUser();
   
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return null;
   
-  return user.role === 'restaurant' ? <RestaurantDashboard /> : <SupplierDashboard />;
+  // Check user metadata for role, default to restaurant
+  const role = (user.publicMetadata?.role as string) || 'restaurant';
+  
+  return role === 'restaurant' ? <RestaurantDashboard /> : <SupplierDashboard />;
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
-
   return (
     <Routes>
-      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-      <Route path="/signup" element={user ? <Navigate to="/dashboard" replace /> : <SignupPage />} />
+      {/* Public routes */}
+      <Route path="/" element={
+        <>
+          <SignedIn>
+            <Navigate to="/dashboard" replace />
+          </SignedIn>
+          <SignedOut>
+            <LandingPage />
+          </SignedOut>
+        </>
+      } />
+      
+      {/* Auth routes with Clerk */}
+      <Route path="/login/*" element={
+        <>
+          <SignedIn>
+            <Navigate to="/dashboard" replace />
+          </SignedIn>
+          <SignedOut>
+            <LoginPage />
+          </SignedOut>
+        </>
+      } />
+      <Route path="/signup/*" element={
+        <>
+          <SignedIn>
+            <Navigate to="/dashboard" replace />
+          </SignedIn>
+          <SignedOut>
+            <SignupPage />
+          </SignedOut>
+        </>
+      } />
       
       {/* Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
@@ -62,7 +87,7 @@ function AppRoutes() {
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       
-      {/* Supplier routes - placeholder */}
+      {/* Supplier routes */}
       <Route path="/reports" element={<ProtectedRoute><SupplierDashboard /></ProtectedRoute>} />
       <Route path="/clients" element={<ProtectedRoute><SupplierDashboard /></ProtectedRoute>} />
       <Route path="/performance" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />

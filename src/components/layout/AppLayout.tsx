@@ -1,13 +1,13 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { UserButton } from '@clerk/clerk-react';
 import {
   Home,
   Package,
   BarChart3,
   Building2,
   Settings,
-  LogOut,
   ClipboardList,
   UtensilsCrossed,
   TrendingUp,
@@ -15,10 +15,8 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth, UserRole } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/Logo';
-import { Button } from '@/components/ui/button';
-import { useState } from 'react';
 
 interface NavItem {
   label: string;
@@ -47,7 +45,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -117,25 +115,24 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* User Section */}
         <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-              {user.email.charAt(0).toUpperCase()}
-            </div>
+          <div className="flex items-center gap-3">
+            <UserButton 
+              afterSignOutUrl="/"
+              appearance={{
+                elements: {
+                  avatarBox: "w-10 h-10",
+                }
+              }}
+            />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate text-foreground">
                 {user.email}
               </div>
+              <div className="text-xs text-muted-foreground">
+                {user.companyName}
+              </div>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            className="w-full justify-start text-muted-foreground hover:text-foreground"
-          >
-            <LogOut size={18} />
-            Logout
-          </Button>
         </div>
       </aside>
 
