@@ -8,11 +8,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
 import { ReceiptUploader } from '@/components/receipt/ReceiptUploader';
-import { ScannedItemsTable, ScannedItem } from '@/components/receipt/ScannedItemsTable';
+import { toast } from 'sonner';
+import { VerificationList } from '@/components/receipt/verification/VerificationList';
+import { ScannedItem } from '@/components/receipt/ScannedItemsTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { Delivery } from '@/types/delivery';
 
@@ -33,9 +34,13 @@ export default function UploadReceiptPage() {
   const { deliveryId } = useParams();
 
   const [step, setStep] = useState<PageStep>('upload');
+  const [fakeProgress, setFakeProgress] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingDeliveryId, setExistingDeliveryId] = useState<string | null>(null);
+
+  const [pagesCompleted, setPagesCompleted] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   // Scan result state
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
@@ -44,8 +49,41 @@ export default function UploadReceiptPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [items, setItems] = useState<ScannedItem[]>([]);
 
-  if (!user) return null;
+  // Psychological Progress Bar Logic
+  useEffect(() => {
+    if (step === 'processing') {
+      setFakeProgress(0);
 
+      const timer1 = setTimeout(() => setFakeProgress(30), 500);
+      const timer2 = setTimeout(() => setFakeProgress(60), 2500);
+      const timer3 = setTimeout(() => setFakeProgress(80), 4500);
+      const timer4 = setTimeout(() => setFakeProgress(90), 7500);
+
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+        clearTimeout(timer4);
+      };
+    }
+  }, [step]);
+
+  // When items arrive, complete progress
+  useEffect(() => {
+    if (items.length > 0 && step === 'processing') {
+      setFakeProgress(100);
+    }
+  }, [items.length, step]);
+
+  // Transition to verify when progress is 100%
+  useEffect(() => {
+    if (fakeProgress === 100 && step === 'processing') {
+      const timer = setTimeout(() => setStep('verify'), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [fakeProgress, step]);
+
+  // Load existing delivery if deliveryId is provided
   useEffect(() => {
     const loadDelivery = async () => {
       if (!deliveryId) return;
@@ -77,7 +115,7 @@ export default function UploadReceiptPage() {
 
         // Map DB items to ScannedItem type
         const mappedItems: ScannedItem[] = (itemsData || []).map(item => ({
-          id: item.id, // Ensure ID is mapped
+          id: item.id,
           name: item.name,
           quantity: Number(item.quantity),
           unit: item.unit,
@@ -103,77 +141,136 @@ export default function UploadReceiptPage() {
     loadDelivery();
   }, [deliveryId, navigate]);
 
-  const handleFileSelect = async (file: File, base64: string) => {
+  if (!user) return null;
+
+
+  const handleFileSelect = async (file: File, base64: string | string[]) => {
     setError(null);
     setIsProcessing(true);
     setStep('processing');
 
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    // Reset state
+    setItems([]);
+    setPagesCompleted(0);
+    setTotalPages(0);
+    setScanResult(null);
 
-      if (!supabaseUrl) {
-        throw new Error('Supabase URL not configured');
-      }
-
-      // For now, we'll use a simple approach without Clerk session
-      // In production, you'd get the session token from Clerk/Supabase integration
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/extract-receipt`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
-          },
-          body: JSON.stringify({
-            imageBase64: base64,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to process receipt');
-      }
-
-      // Set the scan result
-      const data = result.data;
-      const extractedSupplierName = data.supplier_name || '';
-      const extractedDeliveryDate = data.date || new Date().toISOString().split('T')[0];
-      const extractedOrderNumber = data.order_number || `INV-${Date.now()}`;
-      const extractedItems = data.items || [];
-
-      setScanResult(data);
-      setSupplierName(extractedSupplierName);
-      setDeliveryDate(extractedDeliveryDate);
-      setOrderNumber(extractedOrderNumber);
-      setItems(extractedItems);
-
-      setStep('verify');
-
-      // Auto-save as draft
-      try {
-        await saveDelivery('draft', {
-          supplierName: extractedSupplierName,
-          deliveryDate: extractedDeliveryDate,
-          orderNumber: extractedOrderNumber,
-          items: extractedItems
-        });
-        toast.success('Receipt scanned and saved as draft');
-      } catch (saveErr) {
-        console.warn('Auto-save failed:', saveErr);
-        toast.info('Receipt scanned successfully (auto-save failed)');
-      }
-    } catch (err) {
-      console.error('Scan error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to process receipt');
-      setStep('upload');
-      toast.error('Failed to scan receipt', {
-        description: err instanceof Error ? err.message : 'Please try again',
-      });
-    } finally {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      setError('Supabase URL not configured');
       setIsProcessing(false);
+      setStep('upload');
+      return;
+    }
+
+    const images = Array.isArray(base64) ? base64 : [base64];
+    const totalCount = images.length;
+    setTotalPages(totalCount);
+    console.log(`Processing ${totalCount} images/pages...`);
+
+    // Helper to process a single page
+    const processPage = async (imgBase64: string, index: number) => {
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/extract-receipt`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
+            },
+            body: JSON.stringify({
+              imageBase64: imgBase64,
+            }),
+          }
+        );
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || `Failed to process page ${index + 1}`);
+        }
+
+        const data = result.data;
+
+        // Filter out non-product items (payment methods, totals, fees, etc.)
+        const nonProductPatterns = [
+          /^debit/i,
+          /^credit/i,
+          /^veloitus/i,
+          /^maksu/i,
+          /^yhteensä/i,
+          /^summa/i,
+          /^alv/i,
+          /^vero/i,
+          /^total/i,
+          /^subtotal/i,
+          /^payment/i,
+          /^change/i,
+          /^cash/i,
+          /^card/i,
+          /^kortti/i,
+          /^käteinen/i,
+          /^pankkikortti/i,
+          /^luottokortti/i,
+          /^vaihtoraha/i,
+          /^palvelumaksu/i,
+          /^toimitusmaksu/i,
+        ];
+
+        const filterNonProducts = (items: ScannedItem[]): ScannedItem[] => {
+          return items.filter(item => {
+            const name = item.name.toLowerCase().trim();
+            const isNonProduct = nonProductPatterns.some(pattern => pattern.test(name));
+            return !isNonProduct;
+          });
+        };
+
+        const filteredRawItems = filterNonProducts(data.items || []);
+
+        // Add new items with unique IDs based on page index
+        const newItems = filteredRawItems.map((item: ScannedItem, i: number) => ({
+          ...item,
+          id: `page${index}-item-${i}`
+        }));
+
+        setItems(prevItems => [...prevItems, ...newItems]);
+
+        // Update header info from first page
+        if (index === 0) {
+          setSupplierName(data.supplier_name || '');
+          setDeliveryDate(data.date || new Date().toISOString().split('T')[0]);
+          setOrderNumber(data.order_number || `INV-${Date.now()}`);
+        }
+
+        return { success: true, data };
+      } catch (err) {
+        console.error(`Page ${index + 1} failed:`, err);
+        return { success: false, error: err };
+      } finally {
+        setPagesCompleted(prev => prev + 1);
+      }
+    };
+
+    // Trigger all pages
+    const promises = images.map((img, idx) => processPage(img, idx));
+    const results = await Promise.all(promises);
+
+    setIsProcessing(false);
+
+    const successfulCount = results.filter(r => r.success).length;
+
+    if (successfulCount === 0) {
+      setError('Failed to process any pages');
+      setStep('upload');
+      toast.error('Scan failed', { description: 'Could not process the receipt' });
+    } else {
+      const msg = successfulCount === totalCount
+        ? 'Receipt scanned successfully!'
+        : `Scanned ${successfulCount} of ${totalCount} pages`;
+
+      toast.success(msg, {
+        description: `Found items from ${successfulCount} pages`,
+      });
     }
   };
 
@@ -195,103 +292,77 @@ export default function UploadReceiptPage() {
       items?: ScannedItem[];
     }
   ) => {
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    // Current state values
+    const currentItems = overrides?.items || items;
+    const currentSupplierName = overrides?.supplierName ?? supplierName;
+    const currentDeliveryDate = overrides?.deliveryDate ?? deliveryDate;
+    const currentOrderNumber = overrides?.orderNumber ?? orderNumber;
 
-      if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error('Supabase configuration missing');
+    // Calculate totals
+    const totalValue = currentItems.reduce((sum, item) => sum + (item.totalPrice || (item.pricePerUnit * item.quantity)), 0);
+    const missingValue = currentItems.reduce((total, item) => {
+      if (item.status === 'missing' && item.missingQuantity) {
+        return total + (item.missingQuantity * item.pricePerUnit);
       }
+      return total;
+    }, 0);
 
-      let supabaseHeaders = {};
-      try {
-        const token = await session?.getToken({ template: 'supabase' });
-        if (token) {
-          supabaseHeaders = { Authorization: `Bearer ${token}` };
-        }
-      } catch (e) {
-        console.warn('Failed to get Supabase token from Clerk:', e);
-      }
+    const finalStatus = targetStatus === 'complete' && missingValue > 0 ? 'pending_redelivery' : targetStatus;
 
-      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: supabaseHeaders },
-      });
+    // Prepare Delivery Header
+    const deliveryPayload = {
+      ...(existingDeliveryId ? { id: existingDeliveryId } : {}),
+      restaurant_id: user.id,
+      user_id: user.id,
+      supplier_name: currentSupplierName,
+      delivery_date: currentDeliveryDate,
+      order_number: currentOrderNumber,
+      total_value: totalValue,
+      missing_value: missingValue,
+      status: finalStatus,
+    };
 
-      // Use overrides or current state
-      const currentItems = overrides?.items || items;
-      const currentSupplierName = overrides?.supplierName ?? supplierName;
-      const currentDeliveryDate = overrides?.deliveryDate ?? deliveryDate;
-      const currentOrderNumber = overrides?.orderNumber ?? orderNumber;
+    // Upsert Delivery
+    const { data: deliveryData, error: deliveryError } = await supabase
+      .from('deliveries')
+      .upsert(deliveryPayload)
+      .select()
+      .single();
 
-      // Calculate totals
-      const totalValue = currentItems.reduce((sum, item) => sum + (item.totalPrice || (item.pricePerUnit * item.quantity)), 0);
+    if (deliveryError) throw deliveryError;
 
-      const missingValue = currentItems.reduce((total, item) => {
-        if (item.status === 'missing' && item.missingQuantity) {
-          return total + (item.missingQuantity * item.pricePerUnit);
-        }
-        return total;
-      }, 0);
+    const newDeliveryId = deliveryData.id;
+    setExistingDeliveryId(newDeliveryId);
 
-      const finalStatus = targetStatus === 'complete' && missingValue > 0 ? 'pending_redelivery' : targetStatus;
+    // Prepare Delivery Items
+    const itemsPayload = currentItems.map(item => ({
+      delivery_id: newDeliveryId,
+      name: item.name || 'Unknown Item',
+      quantity: item.quantity,
+      unit: item.unit || 'unit',
+      price_per_unit: item.pricePerUnit,
+      total_price: item.totalPrice || (item.pricePerUnit * item.quantity),
+      received_quantity: item.receivedQuantity ?? item.quantity,
+      missing_quantity: item.missingQuantity || 0,
+      status: item.status
+    }));
 
-      // Prepare Delivery Header
-      const deliveryPayload = {
-        ...(existingDeliveryId ? { id: existingDeliveryId } : {}),
-        restaurant_id: user.id,
-        user_id: user.id,
-        supplier_name: currentSupplierName,
-        delivery_date: currentDeliveryDate,
-        order_number: currentOrderNumber,
-        total_value: totalValue,
-        missing_value: missingValue,
-        status: finalStatus,
-      };
+    // Delete existing items for this delivery to ensure clean state (sync)
+    const { error: deleteError } = await supabase
+      .from('delivery_items')
+      .delete()
+      .eq('delivery_id', newDeliveryId);
 
-      // Upsert Delivery
-      const { data: deliveryData, error: deliveryError } = await supabaseClient
-        .from('deliveries')
-        .upsert(deliveryPayload)
-        .select()
-        .single();
+    if (deleteError) throw deleteError;
 
-      if (deliveryError) throw deliveryError;
+    // Insert Items
+    const { error: insertError } = await supabase
+      .from('delivery_items')
+      .insert(itemsPayload);
 
-      const newDeliveryId = deliveryData.id;
-      setExistingDeliveryId(newDeliveryId);
+    if (insertError) throw insertError;
 
-      // Prepare Delivery Items
-      const itemsPayload = currentItems.map(item => ({
-        delivery_id: newDeliveryId,
-        name: item.name || 'Unknown Item',
-        quantity: item.quantity,
-        unit: item.unit || 'unit',
-        price_per_unit: item.pricePerUnit,
-        total_price: item.totalPrice || (item.pricePerUnit * item.quantity),
-        received_quantity: item.receivedQuantity ?? item.quantity,
-        missing_quantity: item.missingQuantity || 0,
-        status: item.status
-      }));
-
-      // Delete existing items for this delivery to ensure clean state (sync)
-      const { error: deleteError } = await supabaseClient
-        .from('delivery_items')
-        .delete()
-        .eq('delivery_id', newDeliveryId);
-
-      if (deleteError) throw deleteError;
-
-      // Insert Items
-      const { error: insertError } = await supabaseClient
-        .from('delivery_items')
-        .insert(itemsPayload);
-
-      if (insertError) throw insertError;
-
-      return { deliveryId: newDeliveryId, missingValue };
-    } catch (err) {
-      throw err;
-    }
+    return { deliveryId: newDeliveryId, missingValue };
   };
 
   const handleSaveDraft = async () => {
@@ -321,15 +392,6 @@ export default function UploadReceiptPage() {
     try {
       setIsProcessing(true);
       const { missingValue } = await saveDelivery('complete');
-
-      console.log('Verification complete:', {
-        supplierName,
-        deliveryDate,
-        orderNumber,
-        itemsCount: items.length,
-        missingValue,
-      });
-
       setStep('complete');
 
       if (missingValue > 0) {
@@ -341,7 +403,6 @@ export default function UploadReceiptPage() {
           description: 'All items received correctly',
         });
       }
-
     } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save verification', {
@@ -354,7 +415,6 @@ export default function UploadReceiptPage() {
 
   const handleBackToUpload = () => {
     setStep('upload');
-    setScanResult(null);
     setItems([]);
     setError(null);
     setExistingDeliveryId(null);
@@ -419,15 +479,30 @@ export default function UploadReceiptPage() {
                 className="flex flex-col items-center justify-center py-24"
               >
                 <div className="relative mb-8">
-                  <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                  <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
+                    <FileText className="w-8 h-8 text-primary" />
                   </div>
                 </div>
+
+                <div className="w-64 h-2 bg-muted rounded-full overflow-hidden mb-2 relative">
+                  <motion.div
+                    className="absolute top-0 bottom-0 left-0 bg-primary h-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${fakeProgress}%` }}
+                    transition={{ duration: 0.5, ease: "easeInOut" }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between w-64 mb-6 text-xs text-muted-foreground font-mono">
+                  <span>Analyzing...</span>
+                  <span>{fakeProgress}%</span>
+                </div>
+
                 <h2 className="text-xl font-semibold text-foreground mb-2">
-                  Analyzing your receipt...
+                  Preparing your receipt...
                 </h2>
                 <p className="text-muted-foreground text-center max-w-md">
-                  Our AI is extracting item details, quantities, and prices from your receipt. This usually takes a few seconds.
+                  This usually takes a few seconds
                 </p>
               </motion.div>
             )}
@@ -486,29 +561,13 @@ export default function UploadReceiptPage() {
                   <h2 className="text-lg font-semibold text-foreground mb-4">
                     Verify Items ({items.length})
                   </h2>
-                  <ScannedItemsTable
+                  <VerificationList
                     items={items}
                     onItemsChange={setItems}
-                    editable={true}
+                    onComplete={handleComplete}
+                    pagesCompleted={pagesCompleted}
+                    totalPages={totalPages}
                   />
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-4">
-                  <Button variant="ghost" onClick={handleBackToUpload}>
-                    <ArrowLeft size={16} />
-                    Scan Another Receipt
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleSaveDraft}>
-                      <Save size={16} className="mr-2" />
-                      Save & Continue Later
-                    </Button>
-                    <Button onClick={handleComplete} size="lg">
-                      <CheckCircle size={18} className="mr-2" />
-                      Complete Verification
-                    </Button>
-                  </div>
                 </div>
               </motion.div>
             )}
@@ -567,4 +626,3 @@ export default function UploadReceiptPage() {
     </AppLayout>
   );
 }
-

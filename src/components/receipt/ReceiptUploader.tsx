@@ -5,8 +5,59 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface ReceiptUploaderProps {
-  onFileSelect: (file: File, base64: string) => void;
+  onFileSelect: (file: File, base64: string | string[]) => void;
   disabled?: boolean;
+}
+
+// Convert PDF to images using browser canvas
+async function convertPdfToImage(file: File): Promise<string[]> {
+  const pdfjsLib = await import('pdfjs-dist');
+
+  // Import the worker directly from the package
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
+
+  console.log('PDF.js version:', pdfjsLib.version);
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  const images: string[] = [];
+  const totalPages = pdf.numPages;
+  console.log(`PDF has ${totalPages} pages`);
+
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const originalViewport = page.getViewport({ scale: 1.0 });
+
+    // Calculate scale to fit max width of 1280px while maintaining aspect ratio
+    const MAX_WIDTH = 1280;
+    let scale = 2.0; // Default high quality scale
+
+    if (originalViewport.width * scale > MAX_WIDTH) {
+      scale = MAX_WIDTH / originalViewport.width;
+    }
+
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d')!;
+
+    await (page.render({
+      canvasContext: ctx,
+      viewport: viewport,
+      canvas: canvas,
+    }) as { promise: Promise<void> }).promise;
+
+    // Convert to JPEG with 0.75 quality as requested
+    images.push(canvas.toDataURL('image/jpeg', 0.75));
+  }
+
+  return images;
 }
 
 export function ReceiptUploader({ onFileSelect, disabled }: ReceiptUploaderProps) {
@@ -14,22 +65,23 @@ export function ReceiptUploader({ onFileSelect, disabled }: ReceiptUploaderProps
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (disabled) return;
-    
+    if (disabled || isConverting) return;
+
     if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
     } else if (e.type === 'dragleave') {
       setDragActive(false);
     }
-  }, [disabled]);
+  }, [disabled, isConverting]);
 
-  const processFile = useCallback((file: File) => {
+  const processFile = useCallback(async (file: File) => {
     if (!file) return;
 
     // Validate file type
@@ -60,6 +112,31 @@ export function ReceiptUploader({ onFileSelect, disabled }: ReceiptUploaderProps
       setPreview(null);
     }
 
+    // Handle PDF conversion
+    if (file.type === 'application/pdf') {
+      setIsConverting(true);
+      try {
+        console.log('Converting PDF to images...');
+        const pageImages = await convertPdfToImage(file);
+        console.log(`✅ PDF converted to ${pageImages.length} images`);
+
+        // Use first page as preview
+        if (pageImages.length > 0) {
+          setPreview(pageImages[0]);
+        }
+
+        onFileSelect(file, pageImages);
+      } catch (error) {
+        console.error('PDF conversion failed:', error);
+        alert('Failed to process PDF. Please try uploading as an image.');
+        setPreview(null);
+        setFileName(null);
+      } finally {
+        setIsConverting(false);
+      }
+      return;
+    }
+
     // Convert to base64 and call callback
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -73,9 +150,9 @@ export function ReceiptUploader({ onFileSelect, disabled }: ReceiptUploaderProps
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (disabled) return;
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       processFile(e.dataTransfer.files[0]);
     }
@@ -196,7 +273,7 @@ export function ReceiptUploader({ onFileSelect, disabled }: ReceiptUploaderProps
               <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
                 <Upload className="w-10 h-10 text-primary" />
               </div>
-              
+
               <h3 className="text-xl font-semibold text-foreground mb-2">
                 Upload your receipt
               </h3>

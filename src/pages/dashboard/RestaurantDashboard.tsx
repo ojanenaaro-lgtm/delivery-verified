@@ -1,312 +1,265 @@
-import { Package, Clock, Euro, Building2, Plus, HelpCircle, Search } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Package, Plus, Search, ChevronRight, ChevronDown, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { DeliveryCard } from '@/components/dashboard/DeliveryCard';
-import { DraftDeliveryCard } from '@/components/dashboard/DraftDeliveryCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { Button } from '@/components/ui/button';
-// import { MOCK_DELIVERIES, getPendingDeliveries, Delivery } from '@/data/mockData';
+import { MOCK_DELIVERIES, getPendingDeliveries, Delivery, MOCK_SUPPLIERS } from '@/data/mockData';
 import { useNavigate } from 'react-router-dom';
 import MainContent from '@/components/layout/MainContent';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Delivery, DeliveryItem } from '@/types/delivery';
-import { toast } from 'sonner';
-import { Check, X, ChevronDown, ChevronUp, AlertCircle, Loader2, Trash, Edit, ArrowRight, Calendar } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
-import { Progress } from '@/components/ui/progress';
-
-
+import { format, isToday, isYesterday } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function RestaurantDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  if (!user) return null;
+  // State for collapsible suppliers
+  // Default open: first 2 suppliers in the list
+  const [expandedSuppliers, setExpandedSuppliers] = useState<string[]>([]);
 
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedDeliveryId, setExpandedDeliveryId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  // Stats
-  const [stats, setStats] = useState({
-    totalDeliveries: 0,
-    pendingVerifications: 0,
-    totalCompensation: 0,
-    activeSuppliers: 0
-  });
-
-  const fetchDeliveries = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('deliveries')
-        .select(`
-          *,
-          items:delivery_items(*)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        // Cast to Delivery type - ensuring status and items are correctly typed
-        const typedData = data.map(d => ({
-          ...d,
-          // Ensure status is typed correctly if DB returns generic string
-          status: d.status as Delivery['status']
-        })) as Delivery[];
-
-        setDeliveries(typedData);
-
-        // Calculate stats
-        const pendingCount = typedData.filter(d => d.status === 'pending_redelivery' || d.status === 'draft').length;
-        const totalComp = typedData
-          .filter(d => d.missing_value > 0)
-          .reduce((sum, d) => sum + Number(d.missing_value), 0);
-        const uniqueSuppliers = new Set(typedData.map(d => d.supplier_name)).size;
-
-        setStats({
-          totalDeliveries: typedData.length,
-          pendingVerifications: pendingCount,
-          totalCompensation: totalComp,
-          activeSuppliers: uniqueSuppliers
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching deliveries:', err);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDeliveries();
+  const pendingDeliveries = useMemo(() => {
+    if (!user) return [];
+    return getPendingDeliveries(user.id);
   }, [user]);
 
-  const handleMarkResolved = async (deliveryId: string) => {
-    try {
-      const { error } = await supabase
-        .from('deliveries')
-        .update({ status: 'resolved' })
-        .eq('id', deliveryId);
+  // Group recent (completed) deliveries by supplier
+  const recentDeliveries = useMemo(() => {
+    if (!user) return {};
+    const completed = MOCK_DELIVERIES.filter(d => d.restaurantId === user.id && d.status !== 'pending');
+    const grouped: Record<string, Delivery[]> = {};
 
-      if (error) throw error;
+    completed.forEach(d => {
+      if (!grouped[d.supplierId]) {
+        grouped[d.supplierId] = [];
+      }
+      grouped[d.supplierId].push(d);
+    });
 
-      toast.success('Delivery marked as resolved');
-      fetchDeliveries(); // Refresh data
-    } catch (err) {
-      console.error('Error updating delivery:', err);
-      toast.error('Failed to update status');
+    // Sort deliveries by date desc
+    Object.keys(grouped).forEach(k => {
+      grouped[k].sort((a, b) => new Date(b.deliveryDate).getTime() - new Date(a.deliveryDate).getTime());
+    });
+
+    return grouped;
+  }, [user]);
+
+  // Initialize expanded state once on load
+  useMemo(() => {
+    const suppliers = Object.keys(recentDeliveries);
+    if (expandedSuppliers.length === 0 && suppliers.length > 0) {
+      setExpandedSuppliers(suppliers.slice(0, 2));
     }
-  };
-
-  const handleDeleteDraft = async (deliveryId: string) => {
-    if (!confirm('Are you sure you want to delete this draft?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('deliveries')
-        .delete()
-        .eq('id', deliveryId);
-
-      if (error) throw error;
-
-      toast.success('Draft deleted');
-      fetchDeliveries();
-    } catch (err) {
-      console.error('Error deleting draft:', err);
-      toast.error('Failed to delete draft');
-    }
-  };
+  }, [recentDeliveries, expandedSuppliers.length]);
 
   if (!user) return null;
 
-  const pendingDeliveries = deliveries.filter(d => d.status === 'pending_redelivery');
-  const draftDeliveries = deliveries.filter(d => d.status === 'draft');
+  const toggleSupplier = (supplierId: string) => {
+    setExpandedSuppliers(prev =>
+      prev.includes(supplierId)
+        ? prev.filter(id => id !== supplierId)
+        : [...prev, supplierId]
+    );
+  };
+
+  const formatDeliveryDate = (date: Date | string) => {
+    const d = new Date(date);
+    if (isToday(d)) return 'Today';
+    if (isYesterday(d)) return 'Yesterday';
+    return format(d, 'MMM d');
+  };
+
+  const getSupplierName = (id: string) => {
+    return MOCK_SUPPLIERS.find(s => s.id === id)?.name || 'Unknown Supplier';
+  };
 
   return (
     <AppLayout>
       <MainContent>
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-6xl mx-auto pb-20">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                Welcome back, {user.companyName}!
-              </h1>
-              <p className="text-muted-foreground">
-                Here's what's happening with your deliveries today.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-10 w-10"
-                title="Search"
-              >
-                <Search className="w-5 h-5" />
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  localStorage.setItem('force_show_onboarding', 'true');
-                  localStorage.removeItem('deliveri_onboarding_completed');
-                  navigate('/onboarding');
-                }}
-                size="icon"
-                className="h-10 w-10"
-                title="Onboarding"
-              >
-                <HelpCircle className="w-5 h-5" />
-              </Button>
-              <Button
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-foreground mb-1">
+              Welcome back, {user.companyName}!
+            </h1>
+            <p className="text-muted-foreground">
+              Here's what's happening with your deliveries today.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            {/* Right Column (Desktop) / Top (Mobile) - Upload Card */}
+            <div className="lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:sticky lg:top-6 mb-8 lg:mb-0">
+              <button
                 onClick={() => navigate('/extract-receipt')}
-                className="h-14 px-8 text-lg shadow-md hover:shadow-lg transition-all bg-[#009EE0] hover:bg-[#009EE0]/90 text-white"
+                className="w-full text-left group relative overflow-hidden bg-[#009DE0] hover:bg-[#009DE0]/90 transition-all duration-300 rounded-2xl p-6 shadow-lg shadow-[#009DE0]/20 hover:shadow-xl hover:shadow-[#009DE0]/30 hover:-translate-y-1"
               >
-                <Plus className="w-6 h-6 mr-2" />
-                Upload Receipt
-              </Button>
+                <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-4 -translate-y-4">
+                  <Package size={120} />
+                </div>
+
+                <div className="relative z-10 flex flex-col h-full min-h-[160px] justify-between">
+                  <div className="p-3 bg-white/20 w-fit rounded-xl backdrop-blur-sm mb-4">
+                    <Plus className="w-8 h-8 text-white" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-2">
+                      Upload Receipt
+                    </h3>
+                    <p className="text-blue-50 font-medium leading-relaxed">
+                      Scan a new delivery receipt to start verification
+                    </p>
+                  </div>
+                </div>
+              </button>
             </div>
-          </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard
-              icon={<Package size={24} />}
-              value={stats.totalDeliveries}
-              label="Total Deliveries"
-              variant="primary"
-            />
-            <StatCard
-              icon={<Clock size={24} />}
-              value={stats.pendingVerifications}
-              label="Pending Verifications"
-              variant="warning"
-            />
-            <StatCard
-              icon={<Euro size={24} />}
-              value={`€${stats.totalCompensation.toFixed(2)}`}
-              label="Total Compensation"
-              variant="success"
-            />
-            <StatCard
-              icon={<Building2 size={24} />}
-              value={stats.activeSuppliers}
-              label="Active Suppliers"
-            />
-          </div>
+            {/* Left Column (Desktop) - Main Content */}
+            <div className="lg:col-span-2 lg:row-start-1 space-y-10">
 
+              {/* Pending Verifications Section */}
+              <div>
+                <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                  Pending Verifications
+                  {pendingDeliveries.length > 0 && (
+                    <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full">
+                      {pendingDeliveries.length}
+                    </span>
+                  )}
+                </h2>
 
-          {/* Draft Verifications */}
-          {draftDeliveries.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-lg font-semibold text-foreground mb-4">
-                Verify Recent Scans
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {draftDeliveries.map(draft => (
-                  <DraftDeliveryCard
-                    key={draft.id}
-                    delivery={draft}
-                    onContinue={(id) => navigate(`/verify-delivery/${id}`)}
-                    onDelete={handleDeleteDraft}
-                    isDeleting={deletingId === draft.id}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Pending Verifications */}
-          <div>
-            <h2 className="text-lg font-semibold text-foreground mb-4">
-              Awaiting Supplier Resolution
-            </h2>
-
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : pendingDeliveries.length > 0 ? (
-              <div className="space-y-4">
-                {pendingDeliveries.map((delivery) => (
-                  <div key={delivery.id} className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-                    <div className="p-6">
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                        <div className="space-y-1">
+                {pendingDeliveries.length > 0 ? (
+                  <div className="space-y-3">
+                    {pendingDeliveries.map((delivery) => (
+                      <div
+                        key={delivery.id}
+                        onClick={() => navigate(`/deliveries/${delivery.id}/verify`)}
+                        className="group bg-card border border-border rounded-xl p-5 hover:border-[#009DE0]/50 hover:shadow-sm transition-all cursor-pointer relative"
+                      >
+                        <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-2">
-                            <Building2 className="w-5 h-5 text-muted-foreground" />
-                            <h3 className="font-semibold text-lg">{delivery.supplier_name}</h3>
+                            <div className="p-2 bg-muted/50 rounded-lg text-muted-foreground">
+                              <Package size={18} />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-foreground">{delivery.supplierName}</h3>
+                              <p className="text-xs text-muted-foreground font-mono">{delivery.orderNumber}</p>
+                            </div>
                           </div>
-                          <p className="text-muted-foreground text-sm flex items-center gap-2">
-                            <Clock size={14} />
-                            {format(new Date(delivery.delivery_date), 'dd MMM yyyy')} • Order: {delivery.order_number || 'N/A'}
-                          </p>
+                          <span className="text-sm text-muted-foreground">
+                            {isToday(new Date(delivery.deliveryDate)) ? 'Today' : format(new Date(delivery.deliveryDate), 'MMM d')}
+                            {', '}
+                            {format(new Date(delivery.deliveryDate), 'HH:mm')}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">Missing Value</p>
-                            <p className="text-xl font-bold font-mono text-destructive">€{Number(delivery.missing_value).toFixed(2)}</p>
+                        <div className="flex items-center justify-between pl-12">
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span>{delivery.items.length} items</span>
+                            <span>•</span>
+                            <span>€{delivery.items.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}</span>
                           </div>
-                          <Button
-                            onClick={() => handleMarkResolved(delivery.id)}
-                            variant="outline"
-                            className="text-success hover:text-success hover:bg-success/10 border-success/20"
-                          >
-                            <Check className="w-4 h-4 mr-2" />
-                            Mark Resolved
-                          </Button>
+                          <span className="text-sm font-medium text-[#009DE0] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                            Verify <ChevronRight size={16} />
+                          </span>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-muted/10 border border-dashed border-border rounded-xl p-8 text-center">
+                    <p className="text-muted-foreground font-medium">All caught up! No pending verifications.</p>
+                  </div>
+                )}
+              </div>
 
-                      {/* Missing Items Summary or List */}
-                      <div className="mt-6 pt-4 border-t border-border">
+              {/* Recent Deliveries Section */}
+              <div>
+                <h2 className="text-lg font-semibold text-foreground mb-6">Recent Deliveries</h2>
+
+                <div className="space-y-6">
+                  {Object.keys(recentDeliveries).map(supplierId => {
+                    const deliveries = recentDeliveries[supplierId];
+                    const isExpanded = expandedSuppliers.includes(supplierId);
+
+                    return (
+                      <div key={supplierId} className="bg-card border border-border rounded-xl overflow-hidden">
+                        {/* Supplier Header */}
                         <button
-                          onClick={() => setExpandedDeliveryId(expandedDeliveryId === delivery.id ? null : delivery.id)}
-                          className="flex items-center gap-2 text-sm font-medium text-destructive hover:underline"
+                          onClick={() => toggleSupplier(supplierId)}
+                          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
                         >
-                          <AlertCircle size={16} />
-                          {delivery.items?.filter(i => i.status === 'missing').length} Items Missing
-                          {expandedDeliveryId === delivery.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          <div className="flex items-center gap-3">
+                            <div className={cn("text-muted-foreground transition-transform duration-200", isExpanded && "rotate-90")}>
+                              <ChevronRight size={18} />
+                            </div>
+                            <span className="font-semibold text-foreground">{getSupplierName(supplierId)}</span>
+                          </div>
+                          <span className="text-sm text-muted-foreground">{deliveries.length} deliveries</span>
                         </button>
 
-                        {expandedDeliveryId === delivery.id && (
-                          <div className="mt-4 space-y-3 pl-4 border-l-2 border-destructive/20">
-                            {delivery.items?.filter(i => i.status === 'missing').map(item => (
-                              <div key={item.id} className="flex justify-between items-center text-sm">
-                                <div>
-                                  <p className="font-medium">{item.name}</p>
-                                  <p className="text-muted-foreground">
-                                    {item.missing_quantity} {item.unit} missing from {item.quantity} {item.unit}
-                                  </p>
-                                </div>
-                                <div className="font-mono font-medium">
-                                  €{((item.missing_quantity || 0) * item.price_per_unit).toFixed(2)}
-                                </div>
+                        {/* Deliveries List */}
+                        <AnimatePresence initial={false}>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <div className="border-t border-border">
+                                {deliveries.map(delivery => (
+                                  <div
+                                    key={delivery.id}
+                                    onClick={() => navigate(`/deliveries/${delivery.id}`)}
+                                    className="flex items-center justify-between p-4 pl-12 border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex items-center gap-4">
+                                      <span className="text-sm font-medium text-foreground w-20 text-right">
+                                        {formatDeliveryDate(delivery.deliveryDate)}
+                                      </span>
+                                      <div className="h-4 w-px bg-border sm:block hidden" />
+                                      <span className="text-sm text-muted-foreground w-20 sm:block hidden">
+                                        {delivery.items.length} items
+                                      </span>
+                                      <span className="text-sm text-muted-foreground w-24">
+                                        €{delivery.items.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      {delivery.status === 'discrepancy_reported' ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                          <AlertTriangle size={12} />
+                                          {delivery.discrepancyValue > 0
+                                            ? `Missing €${delivery.discrepancyValue.toFixed(2)}`
+                                            : 'Issues Reported'}
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                          <CheckCircle size={12} />
+                                          Complete
+                                        </span>
+                                      )}
+                                      <ChevronRight size={14} className="text-muted-foreground/50 ml-2" />
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
-            ) : (
-              <EmptyState />
-            )}
+            </div>
           </div>
         </div>
       </MainContent>
-    </AppLayout >
+    </AppLayout>
   );
 }

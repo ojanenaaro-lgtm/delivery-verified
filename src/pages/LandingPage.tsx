@@ -81,8 +81,8 @@ export default function LandingPage() {
 
         {/* Hero content */}
         <div className="relative container mx-auto px-4 py-20 lg:py-32 w-full">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 animate-fade-in-up">
+          <div className="max-w-5xl mx-auto text-center">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-5xl font-bold text-white leading-tight mb-6 animate-fade-in-up">
               <span className="block">The delivery verification layer</span>
               <span className="block text-white/90">your operations are missing.</span>
             </h1>

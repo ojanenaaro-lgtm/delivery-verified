@@ -1,9 +1,13 @@
-// @ts-ignore
+// @ts-expect-error: Deno-specific import
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// @ts-ignore
+// @ts-expect-error: Deno-specific import
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-declare const Deno: any;
+declare const Deno: {
+    env: {
+        get: (key: string) => string | undefined;
+    };
+};
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -88,7 +92,7 @@ serve(async (req: Request) => {
         // 6. Delete storage files
         const { data: files } = await supabase.storage.from('receipt-images').list(userId);
         if (files && files.length > 0) {
-            const paths = files.map((f: any) => `${userId}/${f.name}`);
+            const paths = files.map((f: { name: string }) => `${userId}/${f.name}`);
             await supabase.storage.from('receipt-images').remove(paths);
             // Try to remove the folder itself if possible (usually empty folders are virtual)
         }
@@ -120,10 +124,11 @@ serve(async (req: Request) => {
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
-    } catch (error: any) {
-        console.error('Error processing request:', error);
+    } catch (error: unknown) {
+        const err = error as Error;
+        console.error('Error processing request:', err);
         return new Response(
-            JSON.stringify({ error: error.message || 'Unknown error' }),
+            JSON.stringify({ error: err.message || 'Unknown error' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }
