@@ -63,7 +63,7 @@ export default function RestaurantDashboard() {
                 <HelpCircle className="w-5 h-5" />
               </Button>
               <Button
-                onClick={() => navigate('/upload-receipt')}
+                onClick={() => navigate('/extract-receipt')}
                 className="h-14 px-8 text-lg shadow-md hover:shadow-lg transition-all bg-[#009EE0] hover:bg-[#009EE0]/90 text-white"
               >
                 <Plus className="w-6 h-6 mr-2" />

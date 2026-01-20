@@ -100,7 +100,7 @@ function AppRoutes() {
       <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-      <Route path="/upload-receipt" element={<ProtectedRoute><UploadReceiptPage /></ProtectedRoute>} />
+      <Route path="/extract-receipt" element={<ProtectedRoute><UploadReceiptPage /></ProtectedRoute>} />
 
       {/* Supplier routes */}
       <Route path="/supplier/dashboard" element={<ProtectedRoute><AppLayout><SupplierDashboard /></AppLayout></ProtectedRoute>} />
