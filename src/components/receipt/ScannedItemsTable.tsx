@@ -6,6 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export interface ScannedItem {
   id: string;
@@ -137,6 +142,7 @@ export function ScannedItemsTable({ items, onItemsChange, editable = true }: Sca
             </td>
             {editable && (
               <td className="p-4 text-right">
+
                 {isMissingConfigured ? (
                   <div className="flex items-center justify-end gap-2 text-destructive font-medium">
                     <AlertCircle size={16} />
@@ -161,15 +167,72 @@ export function ScannedItemsTable({ items, onItemsChange, editable = true }: Sca
                     >
                       <Check size={18} />
                     </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleMarkMissingStart(item)}
-                      title="Report missing items"
+
+                    <Popover
+                      open={isMissingInputExpanded}
+                      onOpenChange={(open) => !open && setExpandedMissingId(null)}
                     >
-                      <X size={18} />
-                    </Button>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleMarkMissingStart(item)}
+                          title="Report missing items"
+                        >
+                          <X size={18} />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="end">
+                        <div className="p-4 bg-card border-none">
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-sm">Report Missing Items</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => setExpandedMissingId(null)}
+                              >
+                                <X size={14} />
+                              </Button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                max={item.quantity}
+                                className="w-full text-center text-lg h-10"
+                                value={missingInputValues[item.id] || ''}
+                                onChange={(e) => setMissingInputValues(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                autoFocus
+                              />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                                / {item.quantity} {item.unit}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setExpandedMissingId(null)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="bg-destructive hover:bg-destructive/90 text-white"
+                                onClick={() => handleMarkMissingConfirm(item)}
+                              >
+                                Confirm
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 )}
               </td>
@@ -234,8 +297,8 @@ export function ScannedItemsTable({ items, onItemsChange, editable = true }: Sca
           </div>
         )}
 
-        {/* Missing Input Expansion */}
-        {isMissingInputExpanded && (
+        {/* Mobile-only inline expansion */}
+        {isMissingInputExpanded && isMobile && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}

@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText, Save } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import { Delivery } from '@/types/delivery';
 
 type PageStep = 'upload' | 'processing' | 'verify' | 'complete';
 
@@ -25,10 +27,12 @@ interface ScanResult {
 export default function UploadReceiptPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { deliveryId } = useParams();
 
   const [step, setStep] = useState<PageStep>('upload');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [existingDeliveryId, setExistingDeliveryId] = useState<string | null>(null);
 
   // Scan result state
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
@@ -38,6 +42,63 @@ export default function UploadReceiptPage() {
   const [items, setItems] = useState<ScannedItem[]>([]);
 
   if (!user) return null;
+
+  useEffect(() => {
+    const loadDelivery = async () => {
+      if (!deliveryId) return;
+
+      try {
+        setIsProcessing(true);
+        // Fetch delivery
+        const { data: delivery, error: deliveryError } = await supabase
+          .from('deliveries')
+          .select('*')
+          .eq('id', deliveryId)
+          .single();
+
+        if (deliveryError) throw deliveryError;
+
+        // Fetch items
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('delivery_items')
+          .select('*')
+          .eq('delivery_id', deliveryId);
+
+        if (itemsError) throw itemsError;
+
+        // Populate state
+        setExistingDeliveryId(delivery.id);
+        setSupplierName(delivery.supplier_name);
+        setDeliveryDate(delivery.delivery_date);
+        setOrderNumber(delivery.order_number || '');
+
+        // Map DB items to ScannedItem type
+        const mappedItems: ScannedItem[] = (itemsData || []).map(item => ({
+          id: item.id, // Ensure ID is mapped
+          name: item.name,
+          quantity: Number(item.quantity),
+          unit: item.unit,
+          pricePerUnit: Number(item.price_per_unit),
+          totalPrice: Number(item.total_price),
+          receivedQuantity: item.received_quantity ? Number(item.received_quantity) : undefined,
+          missingQuantity: item.missing_quantity ? Number(item.missing_quantity) : undefined,
+          status: item.status as 'pending' | 'received' | 'missing'
+        }));
+
+        setItems(mappedItems);
+        setStep('verify');
+
+      } catch (err) {
+        console.error('Error loading delivery:', err);
+        toast.error('Failed to load delivery');
+        navigate('/dashboard');
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    loadDelivery();
+  }, [deliveryId, navigate]);
 
   const handleFileSelect = async (file: File, base64: string) => {
     setError(null);
@@ -115,24 +176,198 @@ export default function UploadReceiptPage() {
       return total;
     }, 0);
 
-    // In a real app, you'd save this to Supabase here
-    console.log('Verification complete:', {
-      supplierName,
-      deliveryDate,
-      orderNumber,
-      items,
-      missingValue,
-    });
+    const totalValue = items.reduce((total, item) => total + item.totalPrice, 0);
 
-    setStep('complete');
+    const saveDelivery = async () => {
+      try {
+        if (!user) {
+          toast.error("You must be logged in to save verified deliveries");
+          return;
+        }
 
-    if (missingValue > 0) {
-      toast.success('Verification complete!', {
-        description: `Discrepancy of €${missingValue.toFixed(2)} reported to supplier`,
+        const status = missingValue > 0 ? 'pending_redelivery' : 'complete';
+
+        let deliveryId = existingDeliveryId;
+
+        if (existingDeliveryId) {
+          // Update existing delivery
+          const { error: updateError } = await supabase
+            .from('deliveries')
+            .update({
+              supplier_name: supplierName,
+              delivery_date: deliveryDate,
+              order_number: orderNumber,
+              total_value: totalValue,
+              missing_value: missingValue,
+              status: status
+            })
+            .eq('id', existingDeliveryId);
+
+          if (updateError) throw updateError;
+
+          // Delete existing items to replace them (easier than syncing diffs for now)
+          const { error: deleteItemsError } = await supabase
+            .from('delivery_items')
+            .delete()
+            .eq('delivery_id', existingDeliveryId);
+
+          if (deleteItemsError) throw deleteItemsError;
+
+        } else {
+          // Insert New Delivery
+          const { data: deliveryData, error: deliveryError } = await supabase
+            .from('deliveries')
+            .insert({
+              user_id: user.id,
+              supplier_name: supplierName,
+              delivery_date: deliveryDate,
+              order_number: orderNumber,
+              total_value: totalValue,
+              missing_value: missingValue,
+              status: status
+            })
+            .select()
+            .single();
+
+          if (deliveryError) throw deliveryError;
+          if (!deliveryData) throw new Error('Failed to create delivery record');
+
+          deliveryId = deliveryData.id;
+        }
+
+        // Insert Items (for both new and updated)
+        const { error: itemsError } = await supabase
+          .from('delivery_items')
+          .insert(
+            items.map(item => ({
+              delivery_id: deliveryId,
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+              price_per_unit: item.pricePerUnit,
+              total_price: item.totalPrice,
+              received_quantity: item.receivedQuantity ?? null,
+              missing_quantity: item.missingQuantity ?? null,
+              status: item.status
+            }))
+          );
+
+        if (itemsError) throw itemsError;
+
+        setStep('complete');
+
+        if (missingValue > 0) {
+          toast.success('Verification complete!', {
+            description: `Discrepancy of €${missingValue.toFixed(2)} reported to supplier`,
+          });
+        } else {
+          toast.success('Delivery verified!', {
+            description: 'All items received correctly',
+          });
+        }
+
+      } catch (err: any) {
+        console.error('Error saving delivery:', err);
+        toast.error('Failed to save delivery', {
+          description: err.message || 'Please try again',
+        });
+      }
+    };
+
+    saveDelivery();
+  };
+
+  const handleSaveDraft = async () => {
+    if (!user) return;
+
+    try {
+      const totalValue = items.reduce((total, item) => total + item.totalPrice, 0);
+      // For draft, missing value calculation doesn't restrict status, but good to store whatever we have
+      const missingValue = items.reduce((total, item) => {
+        if (item.status === 'missing' && item.missingQuantity) {
+          return total + (item.missingQuantity * item.pricePerUnit);
+        }
+        return total;
+      }, 0);
+
+      let deliveryId = existingDeliveryId;
+
+      if (existingDeliveryId) {
+        // Update existing draft
+        const { error: updateError } = await supabase
+          .from('deliveries')
+          .update({
+            supplier_name: supplierName,
+            delivery_date: deliveryDate,
+            order_number: orderNumber,
+            total_value: totalValue,
+            missing_value: missingValue,
+            // keep draft status. If it was something else, force it to draft? 
+            // Or usually if we are editing here, it is currently a draft or a new upload.
+            status: 'draft'
+          })
+          .eq('id', existingDeliveryId);
+
+        if (updateError) throw updateError;
+
+        // Delete existing items to replace
+        const { error: deleteItemsError } = await supabase
+          .from('delivery_items')
+          .delete()
+          .eq('delivery_id', existingDeliveryId);
+
+        if (deleteItemsError) throw deleteItemsError;
+
+      } else {
+        // Insert New Draft
+        const { data: deliveryData, error: deliveryError } = await supabase
+          .from('deliveries')
+          .insert({
+            user_id: user.id,
+            supplier_name: supplierName,
+            delivery_date: deliveryDate,
+            order_number: orderNumber,
+            total_value: totalValue,
+            missing_value: missingValue,
+            status: 'draft'
+          })
+          .select()
+          .single();
+
+        if (deliveryError) throw deliveryError;
+        if (!deliveryData) throw new Error('Failed to create draft');
+
+        deliveryId = deliveryData.id;
+      }
+
+      // Insert Items
+      const { error: itemsError } = await supabase
+        .from('delivery_items')
+        .insert(
+          items.map(item => ({
+            delivery_id: deliveryId,
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            price_per_unit: item.pricePerUnit,
+            total_price: item.totalPrice,
+            received_quantity: item.receivedQuantity ?? null,
+            missing_quantity: item.missingQuantity ?? null,
+            status: item.status
+          }))
+        );
+
+      if (itemsError) throw itemsError;
+
+      toast.success('Verification saved', {
+        description: 'You can continue later from your dashboard',
       });
-    } else {
-      toast.success('Delivery verified!', {
-        description: 'All items received correctly',
+      navigate('/dashboard');
+
+    } catch (err: any) {
+      console.error('Error saving draft:', err);
+      toast.error('Failed to save draft', {
+        description: err.message || 'Please try again',
       });
     }
   };
@@ -292,10 +527,16 @@ export default function UploadReceiptPage() {
                     <ArrowLeft size={16} />
                     Scan Another Receipt
                   </Button>
-                  <Button onClick={handleComplete} size="lg">
-                    <CheckCircle size={18} />
-                    Complete Verification
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleSaveDraft}>
+                      <Save size={16} className="mr-2" />
+                      Save & Continue Later
+                    </Button>
+                    <Button onClick={handleComplete} size="lg">
+                      <CheckCircle size={18} className="mr-2" />
+                      Complete Verification
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             )}
