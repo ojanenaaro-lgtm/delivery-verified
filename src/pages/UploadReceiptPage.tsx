@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText, Save } from 'lucide-react';
+import { useSession } from '@clerk/clerk-react';
+import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
@@ -26,6 +28,7 @@ interface ScanResult {
 
 export default function UploadReceiptPage() {
   const { user } = useAuth();
+  const { session } = useSession();
   const navigate = useNavigate();
   const { deliveryId } = useParams();
 
@@ -136,16 +139,32 @@ export default function UploadReceiptPage() {
 
       // Set the scan result
       const data = result.data;
+      const extractedSupplierName = data.supplier_name || '';
+      const extractedDeliveryDate = data.date || new Date().toISOString().split('T')[0];
+      const extractedOrderNumber = data.order_number || `INV-${Date.now()}`;
+      const extractedItems = data.items || [];
+
       setScanResult(data);
-      setSupplierName(data.supplier_name || '');
-      setDeliveryDate(data.date || new Date().toISOString().split('T')[0]);
-      setOrderNumber(data.order_number || `INV-${Date.now()}`);
-      setItems(data.items || []);
+      setSupplierName(extractedSupplierName);
+      setDeliveryDate(extractedDeliveryDate);
+      setOrderNumber(extractedOrderNumber);
+      setItems(extractedItems);
 
       setStep('verify');
-      toast.success('Receipt scanned successfully!', {
-        description: `Found ${data.items?.length || 0} items from ${data.supplier_name}`,
-      });
+
+      // Auto-save as draft
+      try {
+        await saveDelivery('draft', {
+          supplierName: extractedSupplierName,
+          deliveryDate: extractedDeliveryDate,
+          orderNumber: extractedOrderNumber,
+          items: extractedItems
+        });
+        toast.success('Receipt scanned and saved as draft');
+      } catch (saveErr) {
+        console.warn('Auto-save failed:', saveErr);
+        toast.info('Receipt scanned successfully (auto-save failed)');
+      }
     } catch (err) {
       console.error('Scan error:', err);
       setError(err instanceof Error ? err.message : 'Failed to process receipt');
@@ -158,7 +177,138 @@ export default function UploadReceiptPage() {
     }
   };
 
-  const handleComplete = () => {
+  const getMissingValue = () => {
+    return items.reduce((total, item) => {
+      if (item.status === 'missing' && item.missingQuantity) {
+        return total + (item.missingQuantity * item.pricePerUnit);
+      }
+      return total;
+    }, 0);
+  };
+
+  const saveDelivery = async (
+    targetStatus: 'complete' | 'pending_redelivery' | 'draft',
+    overrides?: {
+      supplierName?: string;
+      deliveryDate?: string;
+      orderNumber?: string;
+      items?: ScannedItem[];
+    }
+  ) => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase configuration missing');
+      }
+
+      let supabaseHeaders = {};
+      try {
+        const token = await session?.getToken({ template: 'supabase' });
+        if (token) {
+          supabaseHeaders = { Authorization: `Bearer ${token}` };
+        }
+      } catch (e) {
+        console.warn('Failed to get Supabase token from Clerk:', e);
+      }
+
+      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: supabaseHeaders },
+      });
+
+      // Use overrides or current state
+      const currentItems = overrides?.items || items;
+      const currentSupplierName = overrides?.supplierName ?? supplierName;
+      const currentDeliveryDate = overrides?.deliveryDate ?? deliveryDate;
+      const currentOrderNumber = overrides?.orderNumber ?? orderNumber;
+
+      // Calculate totals
+      const totalValue = currentItems.reduce((sum, item) => sum + (item.totalPrice || (item.pricePerUnit * item.quantity)), 0);
+
+      const missingValue = currentItems.reduce((total, item) => {
+        if (item.status === 'missing' && item.missingQuantity) {
+          return total + (item.missingQuantity * item.pricePerUnit);
+        }
+        return total;
+      }, 0);
+
+      const finalStatus = targetStatus === 'complete' && missingValue > 0 ? 'pending_redelivery' : targetStatus;
+
+      // Prepare Delivery Header
+      const deliveryPayload = {
+        ...(existingDeliveryId ? { id: existingDeliveryId } : {}),
+        restaurant_id: user.id,
+        user_id: user.id,
+        supplier_name: currentSupplierName,
+        delivery_date: currentDeliveryDate,
+        order_number: currentOrderNumber,
+        total_value: totalValue,
+        missing_value: missingValue,
+        status: finalStatus,
+      };
+
+      // Upsert Delivery
+      const { data: deliveryData, error: deliveryError } = await supabaseClient
+        .from('deliveries')
+        .upsert(deliveryPayload)
+        .select()
+        .single();
+
+      if (deliveryError) throw deliveryError;
+
+      const newDeliveryId = deliveryData.id;
+      setExistingDeliveryId(newDeliveryId);
+
+      // Prepare Delivery Items
+      const itemsPayload = currentItems.map(item => ({
+        delivery_id: newDeliveryId,
+        name: item.name || 'Unknown Item',
+        quantity: item.quantity,
+        unit: item.unit || 'unit',
+        price_per_unit: item.pricePerUnit,
+        total_price: item.totalPrice || (item.pricePerUnit * item.quantity),
+        received_quantity: item.receivedQuantity ?? item.quantity,
+        missing_quantity: item.missingQuantity || 0,
+        status: item.status
+      }));
+
+      // Delete existing items for this delivery to ensure clean state (sync)
+      const { error: deleteError } = await supabaseClient
+        .from('delivery_items')
+        .delete()
+        .eq('delivery_id', newDeliveryId);
+
+      if (deleteError) throw deleteError;
+
+      // Insert Items
+      const { error: insertError } = await supabaseClient
+        .from('delivery_items')
+        .insert(itemsPayload);
+
+      if (insertError) throw insertError;
+
+      return { deliveryId: newDeliveryId, missingValue };
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setIsProcessing(true);
+      await saveDelivery('draft');
+      toast.success('Draft saved successfully');
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Save draft error:', err);
+      toast.error('Failed to save draft');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleComplete = async () => {
     // Check if all items are verified
     const unverifiedCount = items.filter((item) => item.status === 'pending').length;
     if (unverifiedCount > 0) {
@@ -168,207 +318,37 @@ export default function UploadReceiptPage() {
       return;
     }
 
-    // Calculate missing value
-    const missingValue = items.reduce((total, item) => {
-      if (item.status === 'missing' && item.missingQuantity) {
-        return total + (item.missingQuantity * item.pricePerUnit);
-      }
-      return total;
-    }, 0);
+    try {
+      setIsProcessing(true);
+      const { missingValue } = await saveDelivery('complete');
 
-    const totalValue = items.reduce((total, item) => total + item.totalPrice, 0);
+      console.log('Verification complete:', {
+        supplierName,
+        deliveryDate,
+        orderNumber,
+        itemsCount: items.length,
+        missingValue,
+      });
 
-    const saveDelivery = async () => {
-      try {
-        if (!user) {
-          toast.error("You must be logged in to save verified deliveries");
-          return;
-        }
+      setStep('complete');
 
-        const status = missingValue > 0 ? 'pending_redelivery' : 'complete';
-
-        let deliveryId = existingDeliveryId;
-
-        if (existingDeliveryId) {
-          // Update existing delivery
-          const { error: updateError } = await supabase
-            .from('deliveries')
-            .update({
-              supplier_name: supplierName,
-              delivery_date: deliveryDate,
-              order_number: orderNumber,
-              total_value: totalValue,
-              missing_value: missingValue,
-              status: status
-            })
-            .eq('id', existingDeliveryId);
-
-          if (updateError) throw updateError;
-
-          // Delete existing items to replace them (easier than syncing diffs for now)
-          const { error: deleteItemsError } = await supabase
-            .from('delivery_items')
-            .delete()
-            .eq('delivery_id', existingDeliveryId);
-
-          if (deleteItemsError) throw deleteItemsError;
-
-        } else {
-          // Insert New Delivery
-          const { data: deliveryData, error: deliveryError } = await supabase
-            .from('deliveries')
-            .insert({
-              user_id: user.id,
-              supplier_name: supplierName,
-              delivery_date: deliveryDate,
-              order_number: orderNumber,
-              total_value: totalValue,
-              missing_value: missingValue,
-              status: status
-            })
-            .select()
-            .single();
-
-          if (deliveryError) throw deliveryError;
-          if (!deliveryData) throw new Error('Failed to create delivery record');
-
-          deliveryId = deliveryData.id;
-        }
-
-        // Insert Items (for both new and updated)
-        const { error: itemsError } = await supabase
-          .from('delivery_items')
-          .insert(
-            items.map(item => ({
-              delivery_id: deliveryId,
-              name: item.name,
-              quantity: item.quantity,
-              unit: item.unit,
-              price_per_unit: item.pricePerUnit,
-              total_price: item.totalPrice,
-              received_quantity: item.receivedQuantity ?? null,
-              missing_quantity: item.missingQuantity ?? null,
-              status: item.status
-            }))
-          );
-
-        if (itemsError) throw itemsError;
-
-        setStep('complete');
-
-        if (missingValue > 0) {
-          toast.success('Verification complete!', {
-            description: `Discrepancy of €${missingValue.toFixed(2)} reported to supplier`,
-          });
-        } else {
-          toast.success('Delivery verified!', {
-            description: 'All items received correctly',
-          });
-        }
-
-      } catch (err: any) {
-        console.error('Error saving delivery:', err);
-        toast.error('Failed to save delivery', {
-          description: err.message || 'Please try again',
+      if (missingValue > 0) {
+        toast.success('Verification complete!', {
+          description: `Discrepancy of €${missingValue.toFixed(2)} reported to supplier`,
+        });
+      } else {
+        toast.success('Delivery verified!', {
+          description: 'All items received correctly',
         });
       }
-    };
 
-    saveDelivery();
-  };
-
-  const handleSaveDraft = async () => {
-    if (!user) return;
-
-    try {
-      const totalValue = items.reduce((total, item) => total + item.totalPrice, 0);
-      // For draft, missing value calculation doesn't restrict status, but good to store whatever we have
-      const missingValue = items.reduce((total, item) => {
-        if (item.status === 'missing' && item.missingQuantity) {
-          return total + (item.missingQuantity * item.pricePerUnit);
-        }
-        return total;
-      }, 0);
-
-      let deliveryId = existingDeliveryId;
-
-      if (existingDeliveryId) {
-        // Update existing draft
-        const { error: updateError } = await supabase
-          .from('deliveries')
-          .update({
-            supplier_name: supplierName,
-            delivery_date: deliveryDate,
-            order_number: orderNumber,
-            total_value: totalValue,
-            missing_value: missingValue,
-            // keep draft status. If it was something else, force it to draft? 
-            // Or usually if we are editing here, it is currently a draft or a new upload.
-            status: 'draft'
-          })
-          .eq('id', existingDeliveryId);
-
-        if (updateError) throw updateError;
-
-        // Delete existing items to replace
-        const { error: deleteItemsError } = await supabase
-          .from('delivery_items')
-          .delete()
-          .eq('delivery_id', existingDeliveryId);
-
-        if (deleteItemsError) throw deleteItemsError;
-
-      } else {
-        // Insert New Draft
-        const { data: deliveryData, error: deliveryError } = await supabase
-          .from('deliveries')
-          .insert({
-            user_id: user.id,
-            supplier_name: supplierName,
-            delivery_date: deliveryDate,
-            order_number: orderNumber,
-            total_value: totalValue,
-            missing_value: missingValue,
-            status: 'draft'
-          })
-          .select()
-          .single();
-
-        if (deliveryError) throw deliveryError;
-        if (!deliveryData) throw new Error('Failed to create draft');
-
-        deliveryId = deliveryData.id;
-      }
-
-      // Insert Items
-      const { error: itemsError } = await supabase
-        .from('delivery_items')
-        .insert(
-          items.map(item => ({
-            delivery_id: deliveryId,
-            name: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            price_per_unit: item.pricePerUnit,
-            total_price: item.totalPrice,
-            received_quantity: item.receivedQuantity ?? null,
-            missing_quantity: item.missingQuantity ?? null,
-            status: item.status
-          }))
-        );
-
-      if (itemsError) throw itemsError;
-
-      toast.success('Verification saved', {
-        description: 'You can continue later from your dashboard',
+    } catch (err) {
+      console.error('Save error:', err);
+      toast.error('Failed to save verification', {
+        description: err instanceof Error ? err.message : 'Please try again',
       });
-      navigate('/dashboard');
-
-    } catch (err: any) {
-      console.error('Error saving draft:', err);
-      toast.error('Failed to save draft', {
-        description: err.message || 'Please try again',
-      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -377,15 +357,7 @@ export default function UploadReceiptPage() {
     setScanResult(null);
     setItems([]);
     setError(null);
-  };
-
-  const getMissingValue = () => {
-    return items.reduce((total, item) => {
-      if (item.status === 'missing' && item.missingQuantity) {
-        return total + (item.missingQuantity * item.pricePerUnit);
-      }
-      return total;
-    }, 0);
+    setExistingDeliveryId(null);
   };
 
   return (
@@ -595,3 +567,4 @@ export default function UploadReceiptPage() {
     </AppLayout>
   );
 }
+

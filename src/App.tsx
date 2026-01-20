@@ -15,6 +15,7 @@ import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import RestaurantDashboard from "./pages/dashboard/RestaurantDashboard";
 import DeliveriesPage from "./pages/DeliveriesPage";
+import DeliveryDetailPage from "./pages/DeliveryDetailPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -97,6 +98,7 @@ function AppRoutes() {
       {/* Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
       <Route path="/deliveries" element={<ProtectedRoute><DeliveriesPage /></ProtectedRoute>} />
+      <Route path="/deliveries/:deliveryId" element={<ProtectedRoute><DeliveryDetailPage /></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

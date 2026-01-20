@@ -65,7 +65,7 @@ export default function RestaurantDashboard() {
         setDeliveries(typedData);
 
         // Calculate stats
-        const pendingCount = typedData.filter(d => d.status === 'pending_redelivery').length;
+        const pendingCount = typedData.filter(d => d.status === 'pending_redelivery' || d.status === 'draft').length;
         const totalComp = typedData
           .filter(d => d.missing_value > 0)
           .reduce((sum, d) => sum + Number(d.missing_value), 0);
@@ -209,7 +209,7 @@ export default function RestaurantDashboard() {
           {draftDeliveries.length > 0 && (
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-foreground mb-4">
-                Draft Verifications
+                Verify Recent Scans
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {draftDeliveries.map(draft => (
@@ -228,7 +228,7 @@ export default function RestaurantDashboard() {
           {/* Pending Verifications */}
           <div>
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              Pending Verifications
+              Awaiting Supplier Resolution
             </h2>
 
             {loading ? (
