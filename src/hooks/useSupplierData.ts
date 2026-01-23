@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useUser } from '@clerk/clerk-react';
 import * as mock from '@/data/mockData';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -61,6 +61,7 @@ export interface SupplierStats {
  */
 export function useSupplierDeliveries() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -106,6 +107,7 @@ export function useSupplierDeliveries() {
  */
 export function useSupplierDeliveriesByStatus(statuses: string[]) {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -128,6 +130,7 @@ export function useSupplierDeliveriesByStatus(statuses: string[]) {
  * Fetch a single delivery with its items
  */
 export function useSupplierDeliveryWithItems(deliveryId: string | undefined) {
+    const supabase = useAuthenticatedSupabase();
     return useQuery({
         queryKey: ['supplier-delivery', deliveryId],
         queryFn: async () => {
@@ -164,6 +167,7 @@ export function useSupplierDeliveryWithItems(deliveryId: string | undefined) {
  */
 export function useSupplierIssues() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -210,6 +214,7 @@ export function useSupplierIssues() {
  */
 export function useSupplierOpenIssues() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -257,6 +262,7 @@ export function useSupplierOpenIssues() {
  * Fetch products from metrotukku_products table
  */
 export function useSupplierProducts() {
+    const supabase = useAuthenticatedSupabase();
     return useQuery({
         queryKey: ['supplier-products'],
         queryFn: async () => {
@@ -286,6 +292,7 @@ export interface ConnectedRestaurant {
  */
 export function useSupplierRestaurants() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -346,6 +353,7 @@ export function useSupplierRestaurants() {
  */
 export function useSupplierStats() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -401,6 +409,7 @@ export function useSupplierStats() {
  */
 export function useUpdateDeliveryStatus() {
     const queryClient = useQueryClient();
+    const supabase = useAuthenticatedSupabase();
 
     return useMutation({
         mutationFn: async ({
@@ -435,6 +444,7 @@ export function useUpdateDeliveryStatus() {
  */
 export function useRecentSupplierDeliveries(limit: number = 5) {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({
@@ -491,6 +501,7 @@ export interface RealtimeDeliveryEvent {
  */
 export function useRealtimeDeliveries(onNewReport?: (event: RealtimeDeliveryEvent) => void) {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
     const queryClient = useQueryClient();
     const channelRef = useRef<RealtimeChannel | null>(null);
@@ -640,6 +651,7 @@ export interface ConnectedRestaurantWithProfile extends ConnectedRestaurant {
  */
 export function useSupplierRestaurantsWithProfiles() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
 
     return useQuery({

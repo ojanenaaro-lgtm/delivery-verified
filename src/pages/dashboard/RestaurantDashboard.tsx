@@ -3,7 +3,7 @@ import { Package, Plus, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Delivery } from '@/types/delivery';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useNavigate } from 'react-router-dom';
 import MainContent from '@/components/layout/MainContent';
 import { format, isToday } from 'date-fns';
@@ -13,6 +13,7 @@ export default function RestaurantDashboard() {
   const { user } = useAuth();
   const { userId } = useClerkAuth();
   const navigate = useNavigate();
+  const supabase = useAuthenticatedSupabase();
 
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);

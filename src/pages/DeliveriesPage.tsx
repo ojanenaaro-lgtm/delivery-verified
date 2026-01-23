@@ -6,7 +6,7 @@ import MainContent from '@/components/layout/MainContent';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Delivery } from '@/types/delivery';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ import { useAuth } from '@clerk/clerk-react';
 export default function DeliveriesPage() {
   const navigate = useNavigate();
   const { userId } = useAuth();
+  const supabase = useAuthenticatedSupabase();
 
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);

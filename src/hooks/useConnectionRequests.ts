@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 
 export type ConnectionRequestStatus = 'pending' | 'accepted' | 'rejected';
 export type EntityType = 'restaurant' | 'supplier';
@@ -41,6 +41,7 @@ interface UseConnectionRequestsReturn {
 
 export function useConnectionRequests(): UseConnectionRequestsReturn {
   const { user } = useAuth();
+  const supabase = useAuthenticatedSupabase();
   const [incomingRequests, setIncomingRequests] = useState<ConnectionRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<ConnectionRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useUser } from '@clerk/clerk-react';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -70,6 +70,7 @@ export interface ReportFilters {
  */
 export function useSupplierReports() {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierId = user?.id || '';
     const queryClient = useQueryClient();
 
@@ -146,6 +147,7 @@ export function useSupplierReports() {
  */
 export function useSupplierReportsList(filters?: ReportFilters) {
     const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const supplierId = user?.id || '';
 
     return useQuery({
@@ -211,6 +213,7 @@ export function useSupplierReportsList(filters?: ReportFilters) {
  * Fetch a single report with full details including items
  */
 export function useSupplierReportDetails(reportId: string | undefined) {
+    const supabase = useAuthenticatedSupabase();
     return useQuery({
         queryKey: ['supplier-report-details', reportId],
         queryFn: async (): Promise<MissingItemsReportWithRestaurant | null> => {
@@ -278,6 +281,7 @@ export function useSupplierReportDetails(reportId: string | undefined) {
  */
 export function useAcknowledgeReport() {
     const queryClient = useQueryClient();
+    const supabase = useAuthenticatedSupabase();
 
     return useMutation({
         mutationFn: async (reportId: string) => {
@@ -314,6 +318,7 @@ export interface ResolveReportParams {
  */
 export function useResolveReport() {
     const queryClient = useQueryClient();
+    const supabase = useAuthenticatedSupabase();
 
     return useMutation({
         mutationFn: async ({ reportId, resolutionType, note }: ResolveReportParams) => {
@@ -360,6 +365,7 @@ export interface DisputeReportParams {
  */
 export function useDisputeReport() {
     const queryClient = useQueryClient();
+    const supabase = useAuthenticatedSupabase();
 
     return useMutation({
         mutationFn: async ({ reportId, reason, details }: DisputeReportParams) => {

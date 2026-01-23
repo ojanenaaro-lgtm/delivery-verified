@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { useSupplierRestaurantsWithProfiles, useSupplierStats } from '@/hooks/useSupplierData';
 import { ConnectButton } from '@/components/connections/ConnectButton';
 import { format } from 'date-fns';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 
 interface SearchedRestaurant {
     id: string;
@@ -34,6 +34,7 @@ interface SearchedRestaurant {
 }
 
 export default function ConnectedRestaurants() {
+    const supabase = useAuthenticatedSupabase();
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [searchResults, setSearchResults] = useState<SearchedRestaurant[]>([]);

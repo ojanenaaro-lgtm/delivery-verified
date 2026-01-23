@@ -48,7 +48,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { Delivery } from '@/types/delivery';
 import { Supplier, SupplierConnection, MissingItemsReport } from '@/types/supplier';
 import { useAuth } from '@/contexts/AuthContext';
@@ -79,6 +79,7 @@ export default function SuppliersPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const supabase = useAuthenticatedSupabase();
 
   // Supplier connections hook
   const {

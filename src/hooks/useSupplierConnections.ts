@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Supplier, SupplierConnection, MissingItemsReport } from '@/types/supplier';
 
@@ -27,6 +27,7 @@ interface UseSupplierConnectionsReturn {
 
 export function useSupplierConnections(): UseSupplierConnectionsReturn {
   const { user } = useAuth();
+  const supabase = useAuthenticatedSupabase();
   const [connectedSuppliers, setConnectedSuppliers] = useState<SupplierConnection[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([]);
   const [missingReports, setMissingReports] = useState<MissingItemsReport[]>([]);

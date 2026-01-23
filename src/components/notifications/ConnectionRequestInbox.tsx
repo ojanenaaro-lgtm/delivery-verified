@@ -12,12 +12,13 @@ import {
 } from '@/components/ui/sheet';
 import { useConnectionRequests, ConnectionRequest } from '@/hooks/useConnectionRequests';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 
 export function ConnectionRequestInbox() {
   const { user } = useAuth();
+  const supabase = useAuthenticatedSupabase();
   const {
     incomingRequests,
     loadingRequests,

@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { Delivery } from '@/types/delivery';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 export default function DeliveryDetailPage() {
     const { deliveryId } = useParams();
     const navigate = useNavigate();
+    const supabase = useAuthenticatedSupabase();
     const [delivery, setDelivery] = useState<Delivery | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 

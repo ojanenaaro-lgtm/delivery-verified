@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { toast } from 'sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const { signOut, session } = useClerk();
+  const supabase = useAuthenticatedSupabase();
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');

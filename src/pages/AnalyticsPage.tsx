@@ -4,13 +4,14 @@ import MainContent from '@/components/layout/MainContent';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { Download, TrendingUp, TrendingDown, Euro, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { Delivery } from '@/types/delivery';
 import { useAuth } from '@clerk/clerk-react';
 import { format, subMonths } from 'date-fns';
 
 export default function AnalyticsPage() {
   const { userId } = useAuth();
+  const supabase = useAuthenticatedSupabase();
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
