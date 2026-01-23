@@ -53,9 +53,14 @@ function DashboardRoute() {
 
   if (!user) return null;
 
-  // If no role is set, redirect to onboarding
+  // If no role is set, check if user skipped onboarding (default to restaurant)
   if (!user.role) {
-    return <Navigate to="/onboarding" replace />;
+    const skippedOnboarding = localStorage.getItem('deliveri_onboarding_completed') === 'true';
+    if (!skippedOnboarding) {
+      return <Navigate to="/onboarding" replace />;
+    }
+    // User skipped onboarding, default to restaurant view
+    return <RestaurantDashboard />;
   }
 
   return user.role === 'restaurant' ? <RestaurantDashboard /> : <AppLayout><SupplierDashboard /></AppLayout>;

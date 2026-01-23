@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText, Save } from 'lucide-react';
@@ -27,6 +27,38 @@ interface ScanResult {
   totalValue: number;
 }
 
+// Moved outside component to prevent recreation on each render
+const NON_PRODUCT_PATTERNS = [
+  /^debit/i,
+  /^credit/i,
+  /^veloitus/i,
+  /^maksu/i,
+  /^yhteensä/i,
+  /^summa/i,
+  /^alv/i,
+  /^vero/i,
+  /^total/i,
+  /^subtotal/i,
+  /^payment/i,
+  /^change/i,
+  /^cash/i,
+  /^card/i,
+  /^kortti/i,
+  /^käteinen/i,
+  /^pankkikortti/i,
+  /^luottokortti/i,
+  /^vaihtoraha/i,
+  /^palvelumaksu/i,
+  /^toimitusmaksu/i,
+];
+
+const filterNonProducts = (items: ScannedItem[]): ScannedItem[] => {
+  return items.filter(item => {
+    const name = item.name.toLowerCase().trim();
+    return !NON_PRODUCT_PATTERNS.some(pattern => pattern.test(name));
+  });
+};
+
 export default function UploadReceiptPage() {
   const { user } = useAuth();
   const { session } = useSession();
@@ -49,39 +81,30 @@ export default function UploadReceiptPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [items, setItems] = useState<ScannedItem[]>([]);
 
-  // Psychological Progress Bar Logic
+  // Real progress based on pages completed + small initial boost for perceived speed
   useEffect(() => {
     if (step === 'processing') {
-      setFakeProgress(0);
-
-      const timer1 = setTimeout(() => setFakeProgress(30), 500);
-      const timer2 = setTimeout(() => setFakeProgress(60), 2500);
-      const timer3 = setTimeout(() => setFakeProgress(80), 4500);
-      const timer4 = setTimeout(() => setFakeProgress(90), 7500);
-
-      return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
-        clearTimeout(timer3);
-        clearTimeout(timer4);
-      };
+      if (totalPages === 0) {
+        // Initial state - show small progress to indicate work started
+        setFakeProgress(10);
+      } else {
+        // Calculate real progress based on pages completed
+        const realProgress = Math.round((pagesCompleted / totalPages) * 100);
+        // Add slight boost at start for better perceived performance
+        const adjustedProgress = Math.max(10, Math.min(realProgress, 100));
+        setFakeProgress(adjustedProgress);
+      }
     }
-  }, [step]);
+  }, [step, pagesCompleted, totalPages]);
 
-  // When items arrive, complete progress
+  // Transition to verify when all pages completed
   useEffect(() => {
-    if (items.length > 0 && step === 'processing') {
+    if (pagesCompleted > 0 && pagesCompleted === totalPages && step === 'processing') {
       setFakeProgress(100);
-    }
-  }, [items.length, step]);
-
-  // Transition to verify when progress is 100%
-  useEffect(() => {
-    if (fakeProgress === 100 && step === 'processing') {
-      const timer = setTimeout(() => setStep('verify'), 500);
+      const timer = setTimeout(() => setStep('verify'), 300);
       return () => clearTimeout(timer);
     }
-  }, [fakeProgress, step]);
+  }, [pagesCompleted, totalPages, step]);
 
   // Load existing delivery if deliveryId is provided
   useEffect(() => {
@@ -192,39 +215,7 @@ export default function UploadReceiptPage() {
 
         const data = result.data;
 
-        // Filter out non-product items (payment methods, totals, fees, etc.)
-        const nonProductPatterns = [
-          /^debit/i,
-          /^credit/i,
-          /^veloitus/i,
-          /^maksu/i,
-          /^yhteensä/i,
-          /^summa/i,
-          /^alv/i,
-          /^vero/i,
-          /^total/i,
-          /^subtotal/i,
-          /^payment/i,
-          /^change/i,
-          /^cash/i,
-          /^card/i,
-          /^kortti/i,
-          /^käteinen/i,
-          /^pankkikortti/i,
-          /^luottokortti/i,
-          /^vaihtoraha/i,
-          /^palvelumaksu/i,
-          /^toimitusmaksu/i,
-        ];
-
-        const filterNonProducts = (items: ScannedItem[]): ScannedItem[] => {
-          return items.filter(item => {
-            const name = item.name.toLowerCase().trim();
-            const isNonProduct = nonProductPatterns.some(pattern => pattern.test(name));
-            return !isNonProduct;
-          });
-        };
-
+        // Filter out non-product items using module-level function
         const filteredRawItems = filterNonProducts(data.items || []);
 
         // Add new items with unique IDs based on page index
@@ -274,14 +265,15 @@ export default function UploadReceiptPage() {
     }
   };
 
-  const getMissingValue = () => {
+  // Memoize missing value calculation to prevent recalculation on every render
+  const missingValue = useMemo(() => {
     return items.reduce((total, item) => {
       if (item.status === 'missing' && item.missingQuantity) {
         return total + (item.missingQuantity * item.pricePerUnit);
       }
       return total;
     }, 0);
-  };
+  }, [items]);
 
   const saveDelivery = async (
     targetStatus: 'complete' | 'pending_redelivery' | 'draft',
@@ -494,15 +486,15 @@ export default function UploadReceiptPage() {
                 </div>
 
                 <div className="flex items-center justify-between w-64 mb-6 text-xs text-muted-foreground font-mono">
-                  <span>Analyzing...</span>
+                  <span>{totalPages > 1 ? `Page ${pagesCompleted + 1} of ${totalPages}` : 'Analyzing...'}</span>
                   <span>{fakeProgress}%</span>
                 </div>
 
                 <h2 className="text-xl font-semibold text-foreground mb-2">
-                  Preparing your receipt...
+                  {items.length > 0 ? `Found ${items.length} items...` : 'Scanning receipt...'}
                 </h2>
                 <p className="text-muted-foreground text-center max-w-md">
-                  This usually takes a few seconds
+                  {totalPages > 1 ? 'Processing multiple pages' : 'Extracting product information'}
                 </p>
               </motion.div>
             )}
@@ -591,11 +583,11 @@ export default function UploadReceiptPage() {
                   Your delivery from <span className="font-medium text-foreground">{supplierName}</span> has been verified.
                 </p>
 
-                {getMissingValue() > 0 ? (
+                {missingValue > 0 ? (
                   <div className="bg-destructive/10 rounded-xl p-4 mt-4 mb-8 text-center">
                     <p className="text-sm text-destructive">Discrepancy Reported</p>
                     <p className="text-2xl font-bold font-mono text-destructive">
-                      €{getMissingValue().toFixed(2)}
+                      €{missingValue.toFixed(2)}
                     </p>
                     <p className="text-xs text-destructive/80 mt-1">
                       A report has been sent to the supplier

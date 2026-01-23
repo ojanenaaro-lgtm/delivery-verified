@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HelpCircle } from 'lucide-react';
@@ -15,11 +15,12 @@ type OnboardingPhase = 'welcome' | 'features' | 'role-select' | 'success';
 
 export default function OnboardingPage() {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, updateUserMetadata } = useAuth();
     const [phase, setPhase] = useState<OnboardingPhase>('welcome');
     const [featureIndex, setFeatureIndex] = useState(0);
     const [userName, setUserName] = useState('');
     const [userRole, setUserRole] = useState<'restaurant' | 'supplier'>('restaurant');
+    const [isSkipping, setIsSkipping] = useState(false);
 
     // Check if user should see onboarding
     useEffect(() => {
@@ -33,10 +34,22 @@ export default function OnboardingPage() {
         }
     }, [user, navigate]);
 
-    const handleSkip = () => {
+    const handleSkip = useCallback(async () => {
+        if (isSkipping) return;
+        setIsSkipping(true);
+
         localStorage.setItem('deliveri_onboarding_completed', 'true');
+
+        // Try to set default role for better persistence
+        try {
+            await updateUserMetadata({ role: 'restaurant' });
+        } catch (error) {
+            // Silently fail - localStorage fallback will work
+            console.warn('Could not set default role:', error);
+        }
+
         navigate('/dashboard', { replace: true });
-    };
+    }, [isSkipping, updateUserMetadata, navigate]);
 
     const handleWelcomeNext = () => {
         setPhase('features');
