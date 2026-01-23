@@ -14,6 +14,7 @@ import {
     MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth, UserRole as AuthRole } from '@/contexts/AuthContext';
 
 interface RoleSelectStepProps {
     onNext: () => void;
@@ -23,6 +24,7 @@ interface RoleSelectStepProps {
 type UserRole = 'restaurant' | 'supplier' | null;
 
 export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) {
+    const { updateUserMetadata } = useAuth();
     const [selectedRole, setSelectedRole] = useState<UserRole>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,6 +46,10 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                     return;
                 }
                 // Save restaurant data here
+                await updateUserMetadata({
+                    role: 'restaurant' as AuthRole,
+                    companyName: restaurantName,
+                });
                 toast.success('Welcome to DeliVeri!');
                 onNext();
             } else if (selectedRole === 'supplier') {
@@ -53,6 +59,10 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                     return;
                 }
                 // Save supplier data here
+                await updateUserMetadata({
+                    role: 'supplier' as AuthRole,
+                    companyName: companyName,
+                });
                 toast.success('Welcome to DeliVeri!');
                 onNext();
             }

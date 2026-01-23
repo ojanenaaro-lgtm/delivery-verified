@@ -6,7 +6,7 @@ export type UserRole = 'restaurant' | 'supplier';
 export interface User {
   id: string;
   email: string;
-  role: UserRole;
+  role: UserRole | null;
   companyName: string;
   createdAt: Date;
 }
@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   logout: () => void;
+  updateUserMetadata: (metadata: { role?: UserRole; companyName?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,20 +28,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // For now, we use publicMetadata for role/companyName, with defaults
   const user: User | null = clerkUser
     ? {
-        id: clerkUser.id,
-        email: clerkUser.primaryEmailAddress?.emailAddress || '',
-        role: (clerkUser.publicMetadata?.role as UserRole) || 'restaurant',
-        companyName: (clerkUser.publicMetadata?.companyName as string) || clerkUser.firstName || 'My Restaurant',
-        createdAt: new Date(clerkUser.createdAt || Date.now()),
-      }
+      id: clerkUser.id,
+      email: clerkUser.primaryEmailAddress?.emailAddress || '',
+      role: (clerkUser.unsafeMetadata?.role as UserRole) || (clerkUser.publicMetadata?.role as UserRole) || null,
+      companyName: (clerkUser.unsafeMetadata?.companyName as string) || (clerkUser.publicMetadata?.companyName as string) || clerkUser.firstName || '',
+      createdAt: new Date(clerkUser.createdAt || Date.now()),
+    }
     : null;
 
   const logout = () => {
     signOut();
   };
 
+  const updateUserMetadata = async (metadata: { role?: UserRole; companyName?: string }) => {
+    if (!clerkUser) return;
+
+    try {
+      await clerkUser.update({
+        unsafeMetadata: {
+          ...clerkUser.unsafeMetadata,
+          ...metadata,
+        },
+      });
+    } catch (error) {
+      console.error('Error updating user metadata:', error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading: !isLoaded, logout }}>
+    <AuthContext.Provider value={{ user, isLoading: !isLoaded, logout, updateUserMetadata }}>
       {children}
     </AuthContext.Provider>
   );

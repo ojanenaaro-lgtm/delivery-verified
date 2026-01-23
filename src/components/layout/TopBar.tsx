@@ -10,7 +10,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { RoleSwitcherDropdown } from './RoleSwitcherDropdown';
 import { MobileMenuButton } from './Sidebar';
 import { GlobalSearch } from '@/components/search/GlobalSearch';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
@@ -69,10 +68,6 @@ export default function TopBar({ onUploadClick }: TopBarProps) {
 
                     {/* Right: Actions */}
                     <div className="flex items-center gap-2 md:gap-3">
-                        {/* Role Switcher - KEY ADDITION */}
-                        <div className="hidden sm:block">
-                            <RoleSwitcherDropdown />
-                        </div>
 
                         {/* Search */}
                         <Button

@@ -14,6 +14,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import RestaurantDashboard from "./pages/dashboard/RestaurantDashboard";
+import { useAuth } from "./contexts/AuthContext";
 import DeliveriesPage from "./pages/DeliveriesPage";
 import DeliveryDetailPage from "./pages/DeliveryDetailPage";
 import SuppliersPage from "./pages/SuppliersPage";
@@ -48,14 +49,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function DashboardRoute() {
-  const { user } = useUser();
+  const { user } = useAuth();
 
   if (!user) return null;
 
-  // Check user metadata for role, default to restaurant
-  const role = (user.publicMetadata?.role as string) || 'restaurant';
+  // If no role is set, redirect to onboarding
+  if (!user.role) {
+    return <Navigate to="/onboarding" replace />;
+  }
 
-  return role === 'restaurant' ? <RestaurantDashboard /> : <AppLayout><SupplierDashboard /></AppLayout>;
+  return user.role === 'restaurant' ? <RestaurantDashboard /> : <AppLayout><SupplierDashboard /></AppLayout>;
 }
 
 function AppRoutes() {

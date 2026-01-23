@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 type ViewMode = 'restaurant' | 'supplier';
 
@@ -16,15 +17,26 @@ const UserRoleContext = createContext<UserRoleContextType | undefined>(undefined
 const STORAGE_KEY = 'deliveri-active-role';
 
 export function UserRoleProvider({ children }: { children: React.ReactNode }) {
+    const { user } = useAuth();
+
+    // Sync activeRole with AuthContext user role
     const [activeRole, setActiveRole] = useState<ViewMode>(() => {
+        if (user?.role) return user.role;
+
         if (typeof window !== 'undefined') {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored === 'restaurant' || stored === 'supplier') {
                 return stored;
             }
         }
-        return 'restaurant'; // Default to restaurant
+        return 'restaurant';
     });
+
+    useEffect(() => {
+        if (user?.role) {
+            setActiveRole(user.role);
+        }
+    }, [user?.role]);
 
     // Persist to localStorage
     useEffect(() => {
@@ -33,6 +45,13 @@ export function UserRoleProvider({ children }: { children: React.ReactNode }) {
     }, [activeRole]);
 
     const switchRole = (role: ViewMode) => {
+        // Roles are now permanent, but we keep the function for compatibility 
+        // with any existing UI that might try to call it, though it won't do anything 
+        // if the user has a permanent role.
+        if (user?.role) {
+            console.log('[UserRoleContext] Cannot switch role: permanent role exists');
+            return;
+        }
         console.log('[UserRoleContext] Switching to:', role);
         setActiveRole(role);
     };

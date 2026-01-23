@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HelpCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 import WelcomeStep from './WelcomeStep';
 import FeatureStep from './FeatureStep';
@@ -14,6 +15,7 @@ type OnboardingPhase = 'welcome' | 'features' | 'role-select' | 'success';
 
 export default function OnboardingPage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [phase, setPhase] = useState<OnboardingPhase>('welcome');
     const [featureIndex, setFeatureIndex] = useState(0);
     const [userName, setUserName] = useState('');
@@ -21,13 +23,15 @@ export default function OnboardingPage() {
 
     // Check if user should see onboarding
     useEffect(() => {
-        const completed = localStorage.getItem('deliveri_onboarding_completed');
-        const forceShow = localStorage.getItem('force_show_onboarding');
-
-        if (completed && !forceShow) {
-            navigate('/dashboard', { replace: true });
+        // If user already has a role set in metadata, skip onboarding
+        if (user?.role) {
+            const forceShow = localStorage.getItem('force_show_onboarding');
+            if (!forceShow) {
+                const dashboardPath = user.role === 'supplier' ? '/supplier/dashboard' : '/dashboard';
+                navigate(dashboardPath, { replace: true });
+            }
         }
-    }, [navigate]);
+    }, [user, navigate]);
 
     const handleSkip = () => {
         localStorage.setItem('deliveri_onboarding_completed', 'true');
