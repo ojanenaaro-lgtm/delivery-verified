@@ -32,7 +32,8 @@ import {
   DeliveryIssues,
   ProductCatalog,
   ConnectedRestaurants,
-  SupplierAnalytics
+  SupplierAnalytics,
+  RestaurantDetailPage
 } from "./pages/supplier";
 
 const queryClient = new QueryClient();
@@ -120,6 +121,7 @@ function AppRoutes() {
       <Route path="/supplier/issues" element={<ProtectedRoute><AppLayout><DeliveryIssues /></AppLayout></ProtectedRoute>} />
       <Route path="/supplier/products" element={<ProtectedRoute><AppLayout><ProductCatalog /></AppLayout></ProtectedRoute>} />
       <Route path="/supplier/restaurants" element={<ProtectedRoute><AppLayout><ConnectedRestaurants /></AppLayout></ProtectedRoute>} />
+      <Route path="/supplier/restaurant/:restaurantId" element={<ProtectedRoute><AppLayout><RestaurantDetailPage /></AppLayout></ProtectedRoute>} />
       <Route path="/supplier/analytics" element={<ProtectedRoute><AppLayout><SupplierAnalytics /></AppLayout></ProtectedRoute>} />
 
       {/* Onboarding */}

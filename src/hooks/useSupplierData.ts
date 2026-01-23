@@ -548,7 +548,6 @@ export function useRealtimeDeliveries(onNewReport?: (event: RealtimeDeliveryEven
             )
             .subscribe((status) => {
                 setIsConnected(status === 'SUBSCRIBED');
-                console.log(`[Realtime] Supplier channel status: ${status}`);
             });
 
         channelRef.current = channel;
@@ -625,6 +624,7 @@ export interface RestaurantProfile {
     contact_email: string | null;
     contact_phone: string | null;
     address: string | null;
+    street_address: string | null;
     city: string | null;
     postal_code: string | null;
 }

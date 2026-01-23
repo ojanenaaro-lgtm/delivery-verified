@@ -3,11 +3,11 @@ import {
     Truck,
     Search,
     Filter,
-    Package,
-    MapPin,
     Clock,
     CheckCircle,
-    Loader2
+    Loader2,
+    Building2,
+    AlertTriangle
 } from 'lucide-react';
 import MainContent from '@/components/layout/MainContent';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { useSupplierDeliveriesByStatus, Delivery } from '@/hooks/useSupplierData';
+import { useSupplierDeliveriesByStatus, useSupplierRestaurantsWithProfiles, Delivery } from '@/hooks/useSupplierData';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -29,7 +29,19 @@ export default function OutgoingDeliveries() {
     const [statusFilter, setStatusFilter] = useState<string>('all');
 
     // Get active deliveries (complete and pending_redelivery)
-    const { data: deliveries, isLoading, error } = useSupplierDeliveriesByStatus(['complete', 'pending_redelivery']);
+    const { data: deliveries, isLoading, error } = useSupplierDeliveriesByStatus(['complete', 'pending_redelivery', 'resolved']);
+    const { data: restaurants } = useSupplierRestaurantsWithProfiles();
+
+    // Create a map of restaurant profiles for quick lookup
+    const restaurantMap = useMemo(() => {
+        const map = new Map<string, string>();
+        if (restaurants) {
+            restaurants.forEach(r => {
+                map.set(r.restaurantId, r.profile?.name || `Restaurant ${r.restaurantId.slice(0, 8)}`);
+            });
+        }
+        return map;
+    }, [restaurants]);
 
     const filteredDeliveries = useMemo(() => {
         if (!deliveries) return [];
@@ -42,7 +54,8 @@ export default function OutgoingDeliveries() {
             result = result.filter(
                 (d) =>
                     (d.order_number?.toLowerCase() || '').includes(query) ||
-                    d.user_id.toLowerCase().includes(query)
+                    d.user_id.toLowerCase().includes(query) ||
+                    restaurantMap.get(d.user_id)?.toLowerCase().includes(query)
             );
         }
 
@@ -51,30 +64,38 @@ export default function OutgoingDeliveries() {
             result = result.filter((d) => d.status === statusFilter);
         }
 
-        // Sort by delivery date
+        // Sort by delivery date (newest first)
         result.sort((a, b) =>
             new Date(b.delivery_date).getTime() - new Date(a.delivery_date).getTime()
         );
 
         return result;
-    }, [deliveries, searchQuery, statusFilter]);
+    }, [deliveries, searchQuery, statusFilter, restaurantMap]);
 
-    const getStatusStep = (status: Delivery['status']) => {
+    const getStatusIcon = (status: Delivery['status']) => {
         switch (status) {
             case 'complete':
-                return 3;
+            case 'resolved':
+                return <CheckCircle className="w-5 h-5 text-[#009EE0]" />;
             case 'pending_redelivery':
-                return 2;
+                return <AlertTriangle className="w-5 h-5 text-red-500" />;
             default:
-                return 1;
+                return <Clock className="w-5 h-5 text-amber-500" />;
         }
     };
 
-    const steps = [
-        { label: 'Processing', icon: Package },
-        { label: 'Issue Reported', icon: Clock },
-        { label: 'Delivered', icon: CheckCircle },
-    ];
+    const getStatusLabel = (status: Delivery['status']) => {
+        switch (status) {
+            case 'complete':
+                return 'Delivered';
+            case 'resolved':
+                return 'Resolved';
+            case 'pending_redelivery':
+                return 'Issue Reported';
+            default:
+                return 'Processing';
+        }
+    };
 
     if (error) {
         return (
@@ -94,7 +115,7 @@ export default function OutgoingDeliveries() {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-foreground mb-2">Outgoing Deliveries</h1>
-                    <p className="text-muted-foreground">Track your deliveries to restaurants</p>
+                    <p className="text-muted-foreground">Operational view of all completed deliveries, sorted by date</p>
                 </div>
 
                 {/* Filters */}
@@ -102,7 +123,7 @@ export default function OutgoingDeliveries() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by order number..."
+                            placeholder="Search by order number or restaurant..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9"
@@ -114,9 +135,10 @@ export default function OutgoingDeliveries() {
                             <SelectValue placeholder="Filter by status" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Active</SelectItem>
+                            <SelectItem value="all">All Deliveries</SelectItem>
                             <SelectItem value="complete">Delivered</SelectItem>
                             <SelectItem value="pending_redelivery">Issue Reported</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -129,25 +151,30 @@ export default function OutgoingDeliveries() {
                 ) : filteredDeliveries.length > 0 ? (
                     <div className="space-y-4">
                         {filteredDeliveries.map((delivery) => {
-                            const currentStep = getStatusStep(delivery.status);
+                            const restaurantName = restaurantMap.get(delivery.user_id) || `Restaurant ${delivery.user_id.slice(0, 8)}`;
 
                             return (
-                                <Card key={delivery.id} className="overflow-hidden">
+                                <Card key={delivery.id} className="overflow-hidden shadow-sm">
                                     <CardContent className="p-6">
                                         {/* Header */}
-                                        <div className="flex items-start justify-between mb-6">
+                                        <div className="flex items-start justify-between mb-4">
                                             <div>
                                                 <h3 className="font-semibold text-lg text-foreground mb-1">
                                                     {delivery.order_number || 'No order number'}
                                                 </h3>
-                                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                                    <span className="flex items-center gap-1">
+                                                        <Building2 className="w-3 h-3" />
+                                                        {restaurantName}
+                                                    </span>
+                                                    <span>|</span>
                                                     <span>{format(new Date(delivery.delivery_date), 'MMM d, yyyy')}</span>
-                                                    <span>•</span>
-                                                    <span className="font-medium">€{Number(delivery.total_value || 0).toFixed(2)}</span>
+                                                    <span>|</span>
+                                                    <span className="font-medium">{Number(delivery.total_value || 0).toFixed(2)}</span>
                                                     {Number(delivery.missing_value || 0) > 0 && (
                                                         <>
-                                                            <span>•</span>
-                                                            <span className="text-red-600">-€{Number(delivery.missing_value).toFixed(2)} missing</span>
+                                                            <span>|</span>
+                                                            <span className="text-red-600">-{Number(delivery.missing_value).toFixed(2)} missing</span>
                                                         </>
                                                     )}
                                                 </div>
@@ -155,33 +182,35 @@ export default function OutgoingDeliveries() {
                                             <Badge
                                                 variant="outline"
                                                 className={cn(
-                                                    delivery.status === 'complete' && "bg-[#009EE0]/10 text-[#009EE0] border-[#009EE0]/20",
+                                                    "px-3 py-1",
+                                                    (delivery.status === 'complete' || delivery.status === 'resolved') && "bg-[#009EE0]/10 text-[#009EE0] border-[#009EE0]/30",
                                                     delivery.status === 'pending_redelivery' && "bg-red-50 text-red-700 border-red-200"
                                                 )}
                                             >
-                                                {delivery.status === 'complete' ? 'Delivered' : 'Issue Reported'}
+                                                {getStatusLabel(delivery.status)}
                                             </Badge>
                                         </div>
 
                                         {/* Status Indicator */}
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
                                             <div className={cn(
-                                                "flex items-center justify-center w-8 h-8 rounded-full",
-                                                delivery.status === 'complete'
-                                                    ? "bg-[#009EE0]/10 text-[#009EE0]"
-                                                    : "bg-red-100 text-red-600"
+                                                "flex items-center justify-center w-10 h-10 rounded-full",
+                                                (delivery.status === 'complete' || delivery.status === 'resolved')
+                                                    ? "bg-[#009EE0]/10"
+                                                    : "bg-red-100"
                                             )}>
-                                                {delivery.status === 'complete' ? (
-                                                    <CheckCircle className="w-4 h-4" />
-                                                ) : (
-                                                    <Clock className="w-4 h-4" />
-                                                )}
+                                                {getStatusIcon(delivery.status)}
                                             </div>
-                                            <span className="text-sm text-muted-foreground">
-                                                {delivery.status === 'complete'
-                                                    ? 'Delivery completed successfully'
-                                                    : 'Issue reported - awaiting resolution'}
-                                            </span>
+                                            <div>
+                                                <p className="text-sm font-medium text-foreground">
+                                                    {delivery.status === 'complete' && 'Delivery completed successfully'}
+                                                    {delivery.status === 'resolved' && 'Issue has been resolved'}
+                                                    {delivery.status === 'pending_redelivery' && 'Issue reported - awaiting resolution'}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Delivered on {format(new Date(delivery.delivery_date), 'MMMM d, yyyy')}
+                                                </p>
+                                            </div>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -189,7 +218,7 @@ export default function OutgoingDeliveries() {
                         })}
                     </div>
                 ) : (
-                    <Card>
+                    <Card className="shadow-sm">
                         <CardContent className="py-12 text-center">
                             <Truck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                             <h3 className="text-xl font-semibold text-foreground mb-2">No deliveries found</h3>
