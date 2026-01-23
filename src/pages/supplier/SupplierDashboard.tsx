@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     ShoppingCart,
@@ -8,7 +9,10 @@ import {
     Clock,
     DollarSign,
     Package,
-    Loader2
+    Loader2,
+    Bell,
+    Wifi,
+    WifiOff
 } from 'lucide-react';
 import MainContent from '@/components/layout/MainContent';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,9 +22,12 @@ import {
     useSupplierStats,
     useRecentSupplierDeliveries,
     useSupplierOpenIssues,
+    useRealtimeDiscrepancyAlerts,
     Delivery
 } from '@/hooks/useSupplierData';
 import { format, formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 export default function SupplierDashboard() {
     const navigate = useNavigate();
@@ -29,7 +36,59 @@ export default function SupplierDashboard() {
     const { data: recentDeliveries, isLoading: deliveriesLoading } = useRecentSupplierDeliveries(5);
     const { data: openIssues, isLoading: issuesLoading } = useSupplierOpenIssues();
 
+    // Real-time subscription for live updates
+    const {
+        isConnected,
+        newReportsCount,
+        recentReports,
+        lastEvent,
+        clearAlerts
+    } = useRealtimeDiscrepancyAlerts();
+
     const isLoading = statsLoading || deliveriesLoading || issuesLoading;
+
+    // Show toast notification when new report arrives
+    useEffect(() => {
+        if (lastEvent && lastEvent.type === 'INSERT') {
+            const missingValue = Number(lastEvent.delivery.missing_value || 0);
+            if (missingValue > 0 || lastEvent.delivery.status === 'pending_redelivery') {
+                toast.error(
+                    `New discrepancy report: €${missingValue.toFixed(2)} missing`,
+                    {
+                        description: `Order ${lastEvent.delivery.order_number || 'Unknown'} - ${format(new Date(lastEvent.delivery.delivery_date), 'MMM d')}`,
+                        action: {
+                            label: 'View',
+                            onClick: () => navigate('/supplier/issues'),
+                        },
+                        duration: 8000,
+                    }
+                );
+            } else {
+                toast.success(
+                    'New delivery received',
+                    {
+                        description: `Order ${lastEvent.delivery.order_number || 'Unknown'} - €${Number(lastEvent.delivery.total_value || 0).toFixed(2)}`,
+                        duration: 5000,
+                    }
+                );
+            }
+        } else if (lastEvent && lastEvent.type === 'UPDATE') {
+            const missingValue = Number(lastEvent.delivery.missing_value || 0);
+            if (missingValue > 0) {
+                toast.warning(
+                    `Delivery updated with discrepancy`,
+                    {
+                        description: `Order ${lastEvent.delivery.order_number || 'Unknown'} - €${missingValue.toFixed(2)} missing`,
+                        action: {
+                            label: 'View',
+                            onClick: () => navigate('/supplier/issues'),
+                        },
+                        duration: 6000,
+                    }
+                );
+            }
+        }
+    }, [lastEvent, navigate]);
 
     const getStatusBadge = (status: Delivery['status']) => {
         switch (status) {
@@ -57,6 +116,47 @@ export default function SupplierDashboard() {
                             Here's an overview of your supplier activity
                         </p>
                     </div>
+                    {/* Real-time Status Indicator */}
+                    <div className="flex items-center gap-4">
+                        {newReportsCount > 0 && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="relative border-red-200 text-red-600 hover:bg-red-50"
+                                onClick={() => {
+                                    navigate('/supplier/issues');
+                                    clearAlerts();
+                                }}
+                            >
+                                <Bell className="w-4 h-4 mr-2 animate-pulse" />
+                                {newReportsCount} new report{newReportsCount > 1 ? 's' : ''}
+                            </Button>
+                        )}
+                        <div
+                            className={cn(
+                                "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
+                                isConnected
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                            )}
+                        >
+                            {isConnected ? (
+                                <>
+                                    <Wifi className="w-3 h-3" />
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                    Live
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff className="w-3 h-3" />
+                                    Connecting...
+                                </>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Stats Cards */}
@@ -64,7 +164,7 @@ export default function SupplierDashboard() {
                     <Card className="border-border">
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between mb-2">
-                                <ShoppingCart className="w-5 h-5 text-[#00d4aa]" />
+                                <ShoppingCart className="w-5 h-5 text-[#009EE0]" />
                                 <span className="text-xs text-muted-foreground">Total</span>
                             </div>
                             {statsLoading ? (
@@ -112,10 +212,16 @@ export default function SupplierDashboard() {
                         </CardContent>
                     </Card>
 
-                    <Card className="border-border">
+                    <Card className={cn(
+                        "border-border transition-all",
+                        newReportsCount > 0 && "ring-2 ring-red-500 ring-offset-2"
+                    )}>
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between mb-2">
-                                <AlertTriangle className="w-5 h-5 text-red-500" />
+                                <AlertTriangle className={cn(
+                                    "w-5 h-5 text-red-500",
+                                    newReportsCount > 0 && "animate-pulse"
+                                )} />
                                 <span className="text-xs text-muted-foreground">Open</span>
                             </div>
                             {statsLoading ? (
@@ -134,7 +240,7 @@ export default function SupplierDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                     <Button
                         onClick={() => navigate('/supplier/orders')}
-                        className="h-auto py-6 bg-[#00d4aa] hover:bg-[#00d4aa]/90 text-white"
+                        className="h-auto py-6 bg-[#009EE0] hover:bg-[#009EE0]/90 text-white"
                     >
                         <ShoppingCart className="w-5 h-5 mr-2" />
                         View All Deliveries
@@ -145,24 +251,35 @@ export default function SupplierDashboard() {
                     </Button>
 
                     <Button
-                        onClick={() => navigate('/supplier/deliveries')}
+                        onClick={() => navigate('/supplier/restaurants')}
                         variant="outline"
                         className="h-auto py-6"
                     >
-                        <Truck className="w-5 h-5 mr-2" />
-                        Active Deliveries
+                        <Users className="w-5 h-5 mr-2" />
+                        Connected Restaurants
                         <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
 
                     <Button
-                        onClick={() => navigate('/supplier/issues')}
+                        onClick={() => {
+                            navigate('/supplier/issues');
+                            clearAlerts();
+                        }}
                         variant="outline"
-                        className="h-auto py-6"
+                        className={cn(
+                            "h-auto py-6",
+                            newReportsCount > 0 && "border-red-200 bg-red-50 hover:bg-red-100"
+                        )}
                     >
-                        <AlertTriangle className="w-5 h-5 mr-2" />
+                        <AlertTriangle className={cn(
+                            "w-5 h-5 mr-2",
+                            newReportsCount > 0 && "text-red-500"
+                        )} />
                         Review Issues
-                        {(stats?.openIssues || 0) > 0 && (
-                            <Badge variant="destructive" className="ml-2">{stats?.openIssues}</Badge>
+                        {((stats?.openIssues || 0) > 0 || newReportsCount > 0) && (
+                            <Badge variant="destructive" className="ml-2">
+                                {newReportsCount > 0 ? `${newReportsCount} new` : stats?.openIssues}
+                            </Badge>
                         )}
                         <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
@@ -173,7 +290,7 @@ export default function SupplierDashboard() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <Package className="w-5 h-5 text-[#00d4aa]" />
+                                <Package className="w-5 h-5 text-[#009EE0]" />
                                 Recent Deliveries
                             </CardTitle>
                             <CardDescription>
@@ -221,12 +338,23 @@ export default function SupplierDashboard() {
                         </CardContent>
                     </Card>
 
-                    {/* Open Issues */}
-                    <Card>
+                    {/* Open Issues - Now with real-time updates */}
+                    <Card className={cn(
+                        "transition-all",
+                        newReportsCount > 0 && "ring-2 ring-red-200"
+                    )}>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <AlertTriangle className="w-5 h-5 text-red-500" />
+                                <AlertTriangle className={cn(
+                                    "w-5 h-5 text-red-500",
+                                    newReportsCount > 0 && "animate-pulse"
+                                )} />
                                 Open Issues
+                                {newReportsCount > 0 && (
+                                    <Badge variant="destructive" className="ml-2 animate-pulse">
+                                        {newReportsCount} new
+                                    </Badge>
+                                )}
                             </CardTitle>
                             <CardDescription>
                                 Discrepancies reported by restaurants
@@ -237,9 +365,38 @@ export default function SupplierDashboard() {
                                 <div className="flex items-center justify-center py-8">
                                     <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                                 </div>
-                            ) : openIssues && openIssues.length > 0 ? (
+                            ) : (openIssues && openIssues.length > 0) || recentReports.length > 0 ? (
                                 <div className="space-y-3">
-                                    {openIssues.slice(0, 5).map((issue) => (
+                                    {/* Show new real-time reports first with highlight */}
+                                    {recentReports.map((report) => (
+                                        <div
+                                            key={`new-${report.id}`}
+                                            className="flex items-center justify-between p-3 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 cursor-pointer transition-colors animate-pulse"
+                                            onClick={() => {
+                                                navigate('/supplier/issues');
+                                                clearAlerts();
+                                            }}
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <Badge variant="destructive" className="text-xs">NEW</Badge>
+                                                    <span className="font-medium text-foreground truncate">
+                                                        {report.order_number || 'No order #'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                                    <span className="text-red-600 font-medium">
+                                                        -€{Number(report.missing_value || 0).toFixed(2)} missing
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span className="text-xs text-red-600 font-medium whitespace-nowrap ml-4">
+                                                Just now
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {/* Show existing open issues */}
+                                    {openIssues?.slice(0, 5 - recentReports.length).map((issue) => (
                                         <div
                                             key={issue.id}
                                             className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 cursor-pointer transition-colors"
@@ -281,8 +438,8 @@ export default function SupplierDashboard() {
                     <Card>
                         <CardContent className="pt-6">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-[#00d4aa]/10 rounded-lg">
-                                    <Users className="w-6 h-6 text-[#00d4aa]" />
+                                <div className="p-3 bg-[#009EE0]/10 rounded-lg">
+                                    <Users className="w-6 h-6 text-[#009EE0]" />
                                 </div>
                                 <div>
                                     {statsLoading ? (

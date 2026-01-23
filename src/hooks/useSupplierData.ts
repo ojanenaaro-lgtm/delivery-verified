@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@clerk/clerk-react';
 import * as mock from '@/data/mockData';
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Types based on existing Supabase tables
 export interface Delivery {
@@ -471,6 +473,281 @@ export function useRecentSupplierDeliveries(limit: number = 5) {
             }
 
             return data as Delivery[];
+        },
+    });
+}
+
+// ============ REAL-TIME SUBSCRIPTIONS ============
+
+export interface RealtimeDeliveryEvent {
+    type: 'INSERT' | 'UPDATE' | 'DELETE';
+    delivery: Delivery;
+    timestamp: Date;
+}
+
+/**
+ * Real-time subscription for incoming discrepancy reports
+ * This is CRITICAL for demos - suppliers see reports as they arrive
+ */
+export function useRealtimeDeliveries(onNewReport?: (event: RealtimeDeliveryEvent) => void) {
+    const { user } = useUser();
+    const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
+    const queryClient = useQueryClient();
+    const channelRef = useRef<RealtimeChannel | null>(null);
+    const [isConnected, setIsConnected] = useState(false);
+    const [lastEvent, setLastEvent] = useState<RealtimeDeliveryEvent | null>(null);
+
+    const handleRealtimeChange = useCallback(
+        (payload: RealtimePostgresChangesPayload<Delivery>) => {
+            const delivery = payload.new as Delivery;
+
+            // Only process if this delivery is for our supplier
+            if (delivery?.supplier_name !== supplierName) return;
+
+            const event: RealtimeDeliveryEvent = {
+                type: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+                delivery,
+                timestamp: new Date(),
+            };
+
+            setLastEvent(event);
+
+            // Invalidate queries to refresh data
+            queryClient.invalidateQueries({ queryKey: ['supplier-deliveries'] });
+            queryClient.invalidateQueries({ queryKey: ['supplier-issues'] });
+            queryClient.invalidateQueries({ queryKey: ['supplier-open-issues'] });
+            queryClient.invalidateQueries({ queryKey: ['supplier-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['supplier-recent-deliveries'] });
+            queryClient.invalidateQueries({ queryKey: ['supplier-restaurants'] });
+
+            // Call the callback if provided
+            if (onNewReport) {
+                onNewReport(event);
+            }
+        },
+        [supplierName, queryClient, onNewReport]
+    );
+
+    useEffect(() => {
+        if (!supplierName) return;
+
+        // Create a unique channel name
+        const channelName = `supplier-deliveries-${supplierName.replace(/\s+/g, '-').toLowerCase()}`;
+
+        // Subscribe to changes on the deliveries table
+        const channel = supabase
+            .channel(channelName)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+                    schema: 'public',
+                    table: 'deliveries',
+                },
+                handleRealtimeChange
+            )
+            .subscribe((status) => {
+                setIsConnected(status === 'SUBSCRIBED');
+                console.log(`[Realtime] Supplier channel status: ${status}`);
+            });
+
+        channelRef.current = channel;
+
+        // Cleanup on unmount
+        return () => {
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+                channelRef.current = null;
+                setIsConnected(false);
+            }
+        };
+    }, [supplierName, handleRealtimeChange]);
+
+    return {
+        isConnected,
+        lastEvent,
+    };
+}
+
+/**
+ * Hook specifically for tracking new discrepancy reports in real-time
+ * Shows a count of unread/new reports since last check
+ */
+export function useRealtimeDiscrepancyAlerts() {
+    const [newReportsCount, setNewReportsCount] = useState(0);
+    const [recentReports, setRecentReports] = useState<Delivery[]>([]);
+
+    const handleNewReport = useCallback((event: RealtimeDeliveryEvent) => {
+        // Only count as new if it's an issue (has missing value)
+        const isMissingValueIssue =
+            Number(event.delivery.missing_value || 0) > 0 ||
+            event.delivery.status === 'pending_redelivery';
+
+        if (event.type === 'INSERT' && isMissingValueIssue) {
+            setNewReportsCount((prev) => prev + 1);
+            setRecentReports((prev) => [event.delivery, ...prev].slice(0, 10));
+        } else if (event.type === 'UPDATE' && isMissingValueIssue) {
+            // An existing delivery was updated to have issues
+            setNewReportsCount((prev) => prev + 1);
+            setRecentReports((prev) => {
+                const filtered = prev.filter((d) => d.id !== event.delivery.id);
+                return [event.delivery, ...filtered].slice(0, 10);
+            });
+        }
+    }, []);
+
+    const { isConnected, lastEvent } = useRealtimeDeliveries(handleNewReport);
+
+    const clearAlerts = useCallback(() => {
+        setNewReportsCount(0);
+    }, []);
+
+    const clearRecentReports = useCallback(() => {
+        setRecentReports([]);
+        setNewReportsCount(0);
+    }, []);
+
+    return {
+        isConnected,
+        newReportsCount,
+        recentReports,
+        lastEvent,
+        clearAlerts,
+        clearRecentReports,
+    };
+}
+
+// ============ RESTAURANT PROFILES ============
+
+export interface RestaurantProfile {
+    id: string;
+    name: string;
+    contact_email: string | null;
+    contact_phone: string | null;
+    address: string | null;
+    city: string | null;
+    postal_code: string | null;
+}
+
+export interface ConnectedRestaurantWithProfile extends ConnectedRestaurant {
+    profile: RestaurantProfile | null;
+    discrepancyRate: number;
+    issueCount: number;
+}
+
+/**
+ * Get restaurants with their profile data and stats
+ */
+export function useSupplierRestaurantsWithProfiles() {
+    const { user } = useUser();
+    const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
+
+    return useQuery({
+        queryKey: ['supplier-restaurants-profiles', supplierName],
+        queryFn: async () => {
+            // First get all deliveries for this supplier
+            const { data: deliveries, error: deliveriesError } = await supabase
+                .from('deliveries')
+                .select('user_id, total_value, missing_value, delivery_date, status')
+                .eq('supplier_name', supplierName);
+
+            if (deliveriesError) throw deliveriesError;
+
+            if (!deliveries || deliveries.length === 0) {
+                // Fallback to mock data
+                const mockSupplier = mock.MOCK_SUPPLIERS.find(s =>
+                    s.name.toLowerCase().includes(supplierName.toLowerCase())
+                );
+                if (mockSupplier) {
+                    return mock.getRestaurantsForSupplier(mockSupplier.id).map(r => ({
+                        restaurantId: r.restaurantId,
+                        totalDeliveries: r.totalOrders,
+                        totalValue: r.totalRevenue,
+                        lastDeliveryDate: r.lastOrderDate ? r.lastOrderDate.toISOString() : null,
+                        profile: {
+                            id: r.restaurantId,
+                            name: r.restaurantName,
+                            contact_email: `contact@${r.restaurantName.toLowerCase().replace(/\s+/g, '')}.fi`,
+                            contact_phone: '+358 40 1234567',
+                            address: 'Ravintolakatu 1',
+                            city: 'Helsinki',
+                            postal_code: '00100',
+                        },
+                        discrepancyRate: r.discrepancyRate,
+                        issueCount: Math.floor(r.totalOrders * r.discrepancyRate / 100),
+                    } as ConnectedRestaurantWithProfile));
+                }
+                return [];
+            }
+
+            // Get unique restaurant IDs
+            const restaurantIds = [...new Set(deliveries.map(d => d.user_id))];
+
+            // Fetch restaurant profiles
+            const { data: profiles, error: profilesError } = await supabase
+                .from('restaurants')
+                .select('*')
+                .in('id', restaurantIds);
+
+            if (profilesError) throw profilesError;
+
+            // Create a map of profiles by ID
+            const profileMap = new Map<string, RestaurantProfile>();
+            (profiles || []).forEach((p) => profileMap.set(p.id, p));
+
+            // Aggregate delivery data by restaurant
+            const restaurantMap = new Map<string, {
+                totalDeliveries: number;
+                totalValue: number;
+                totalMissing: number;
+                lastDeliveryDate: string | null;
+                issueCount: number;
+            }>();
+
+            deliveries.forEach((delivery) => {
+                const existing = restaurantMap.get(delivery.user_id);
+                const hasIssue = Number(delivery.missing_value) > 0 || delivery.status === 'pending_redelivery';
+
+                if (existing) {
+                    existing.totalDeliveries += 1;
+                    existing.totalValue += Number(delivery.total_value) || 0;
+                    existing.totalMissing += Number(delivery.missing_value) || 0;
+                    existing.issueCount += hasIssue ? 1 : 0;
+                    if (delivery.delivery_date > (existing.lastDeliveryDate || '')) {
+                        existing.lastDeliveryDate = delivery.delivery_date;
+                    }
+                } else {
+                    restaurantMap.set(delivery.user_id, {
+                        totalDeliveries: 1,
+                        totalValue: Number(delivery.total_value) || 0,
+                        totalMissing: Number(delivery.missing_value) || 0,
+                        lastDeliveryDate: delivery.delivery_date,
+                        issueCount: hasIssue ? 1 : 0,
+                    });
+                }
+            });
+
+            // Build final array with profiles
+            const result: ConnectedRestaurantWithProfile[] = [];
+            restaurantMap.forEach((data, restaurantId) => {
+                const profile = profileMap.get(restaurantId) || null;
+                const discrepancyRate = data.totalDeliveries > 0
+                    ? (data.issueCount / data.totalDeliveries) * 100
+                    : 0;
+
+                result.push({
+                    restaurantId,
+                    totalDeliveries: data.totalDeliveries,
+                    totalValue: data.totalValue,
+                    lastDeliveryDate: data.lastDeliveryDate,
+                    profile,
+                    discrepancyRate,
+                    issueCount: data.issueCount,
+                });
+            });
+
+            // Sort by total value (highest first)
+            return result.sort((a, b) => b.totalValue - a.totalValue);
         },
     });
 }
