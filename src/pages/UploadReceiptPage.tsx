@@ -189,7 +189,6 @@ export default function UploadReceiptPage() {
     const images = Array.isArray(base64) ? base64 : [base64];
     const totalCount = images.length;
     setTotalPages(totalCount);
-    console.log(`Processing ${totalCount} images/pages...`);
 
     // Helper to process a single page
     const processPage = async (imgBase64: string, index: number) => {

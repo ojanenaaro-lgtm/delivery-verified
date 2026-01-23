@@ -41,18 +41,15 @@ export function UserRoleProvider({ children }: { children: React.ReactNode }) {
     // Persist to localStorage
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, activeRole);
-        console.log('[UserRoleContext] Active role set to:', activeRole);
     }, [activeRole]);
 
     const switchRole = (role: ViewMode) => {
-        // Roles are now permanent, but we keep the function for compatibility 
-        // with any existing UI that might try to call it, though it won't do anything 
+        // Roles are now permanent, but we keep the function for compatibility
+        // with any existing UI that might try to call it, though it won't do anything
         // if the user has a permanent role.
         if (user?.role) {
-            console.log('[UserRoleContext] Cannot switch role: permanent role exists');
             return;
         }
-        console.log('[UserRoleContext] Switching to:', role);
         setActiveRole(role);
     };
 

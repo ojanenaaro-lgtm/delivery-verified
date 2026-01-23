@@ -18,14 +18,11 @@ async function convertPdfToImage(file: File): Promise<string[]> {
   // Import the worker directly from the package
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker.default;
 
-  console.log('PDF.js version:', pdfjsLib.version);
-
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
   const images: string[] = [];
   const totalPages = pdf.numPages;
-  console.log(`PDF has ${totalPages} pages`);
 
   for (let i = 1; i <= totalPages; i++) {
     const page = await pdf.getPage(i);
@@ -115,9 +112,7 @@ export function ReceiptUploader({ onFileSelect, disabled }: ReceiptUploaderProps
     if (file.type === 'application/pdf') {
       setIsConverting(true);
       try {
-        console.log('Converting PDF to images...');
         const pageImages = await convertPdfToImage(file);
-        console.log(`✅ PDF converted to ${pageImages.length} images`);
 
         // Use first page as preview
         if (pageImages.length > 0) {
