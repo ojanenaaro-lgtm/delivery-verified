@@ -10,14 +10,13 @@ interface ReceiptUploaderProps {
 }
 
 // Convert PDF to images using browser canvas
+// Convert PDF to images using browser canvas
 async function convertPdfToImage(file: File): Promise<string[]> {
   const pdfjsLib = await import('pdfjs-dist');
+  const pdfWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
 
   // Import the worker directly from the package
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url
-  ).toString();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker.default;
 
   console.log('PDF.js version:', pdfjsLib.version);
 
