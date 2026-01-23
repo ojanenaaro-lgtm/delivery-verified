@@ -84,11 +84,11 @@ export default function SupplierAnalytics() {
 
         return [
             { name: 'Pending', value: pending, color: '#f59e0b' },
-            { name: 'Resolved', value: resolved, color: '#10b981' },
+            { name: 'Resolved', value: resolved, color: '#009EE0' },
         ];
     }, [issues]);
 
-    const COLORS = ['#00d4aa', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const COLORS = ['#009EE0', '#0088C4', '#f59e0b', '#ef4444', '#8b5cf6'];
 
     // Calculate accuracy rate
     const accuracyRate = useMemo(() => {
@@ -113,7 +113,7 @@ export default function SupplierAnalytics() {
                     <Card>
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between mb-2">
-                                <Package className="w-5 h-5 text-[#00d4aa]" />
+                                <Package className="w-5 h-5 text-[#009EE0]" />
                             </div>
                             {statsLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -129,7 +129,7 @@ export default function SupplierAnalytics() {
                     <Card>
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between mb-2">
-                                <DollarSign className="w-5 h-5 text-emerald-500" />
+                                <DollarSign className="w-5 h-5 text-[#009EE0]" />
                             </div>
                             {statsLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -187,7 +187,7 @@ export default function SupplierAnalytics() {
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        <DollarSign className="w-5 h-5 text-emerald-500" />
+                                        <DollarSign className="w-5 h-5 text-[#009EE0]" />
                                         Revenue by Restaurant
                                     </CardTitle>
                                     <CardDescription>Top performing restaurants</CardDescription>
@@ -208,7 +208,7 @@ export default function SupplierAnalytics() {
                                                             borderRadius: '8px',
                                                         }}
                                                     />
-                                                    <Bar dataKey="revenue" fill="#10b981" radius={[0, 4, 4, 0]} />
+                                                    <Bar dataKey="revenue" fill="#009EE0" radius={[0, 4, 4, 0]} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>

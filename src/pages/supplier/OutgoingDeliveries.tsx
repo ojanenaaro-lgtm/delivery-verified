@@ -155,7 +155,7 @@ export default function OutgoingDeliveries() {
                                             <Badge
                                                 variant="outline"
                                                 className={cn(
-                                                    delivery.status === 'complete' && "bg-emerald-50 text-emerald-700 border-emerald-200",
+                                                    delivery.status === 'complete' && "bg-[#009EE0]/10 text-[#009EE0] border-[#009EE0]/20",
                                                     delivery.status === 'pending_redelivery' && "bg-red-50 text-red-700 border-red-200"
                                                 )}
                                             >
@@ -168,7 +168,7 @@ export default function OutgoingDeliveries() {
                                             <div className={cn(
                                                 "flex items-center justify-center w-8 h-8 rounded-full",
                                                 delivery.status === 'complete'
-                                                    ? "bg-emerald-100 text-emerald-600"
+                                                    ? "bg-[#009EE0]/10 text-[#009EE0]"
                                                     : "bg-red-100 text-red-600"
                                             )}>
                                                 {delivery.status === 'complete' ? (

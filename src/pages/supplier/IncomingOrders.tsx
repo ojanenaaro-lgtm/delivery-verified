@@ -84,7 +84,7 @@ export default function IncomingOrders() {
                 );
             case 'complete':
                 return (
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                    <Badge variant="secondary" className="bg-[#009EE0]/10 text-[#009EE0] hover:bg-[#009EE0]/10">
                         <Check className="w-3 h-3 mr-1" />
                         Complete
                     </Badge>
@@ -221,7 +221,7 @@ export default function IncomingOrders() {
                                                         {delivery.status === 'pending_redelivery' && (
                                                             <Button
                                                                 size="sm"
-                                                                className="bg-[#00d4aa] hover:bg-[#00d4aa]/90"
+                                                                className="bg-[#009EE0] hover:bg-[#0088C4]"
                                                                 onClick={(e) => handleResolve(delivery.id, e)}
                                                                 disabled={updateStatus.isPending}
                                                             >
@@ -328,7 +328,7 @@ function OrderDetails({ deliveryId }: { deliveryId: string }) {
                                         <Badge
                                             variant="secondary"
                                             className={cn(
-                                                item.status === 'received' && "bg-emerald-100 text-emerald-700",
+                                                item.status === 'received' && "bg-[#009EE0]/10 text-[#009EE0]",
                                                 item.status === 'missing' && "bg-red-100 text-red-700",
                                                 item.status === 'pending' && "bg-amber-100 text-amber-700"
                                             )}

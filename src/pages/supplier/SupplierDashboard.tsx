@@ -95,7 +95,7 @@ export default function SupplierDashboard() {
             case 'draft':
                 return <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Draft</Badge>;
             case 'complete':
-                return <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Complete</Badge>;
+                return <Badge variant="secondary" className="bg-[#009EE0]/10 text-[#009EE0] hover:bg-[#009EE0]/10">Complete</Badge>;
             case 'pending_redelivery':
                 return <Badge variant="secondary" className="bg-red-100 text-red-700 hover:bg-red-100">Issue Reported</Badge>;
             case 'resolved':
@@ -136,7 +136,7 @@ export default function SupplierDashboard() {
                             className={cn(
                                 "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
                                 isConnected
-                                    ? "bg-emerald-100 text-emerald-700"
+                                    ? "bg-[#009EE0]/10 text-[#009EE0]"
                                     : "bg-amber-100 text-amber-700"
                             )}
                         >
@@ -144,8 +144,8 @@ export default function SupplierDashboard() {
                                 <>
                                     <Wifi className="w-3 h-3" />
                                     <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#009EE0]/50 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[#009EE0]"></span>
                                     </span>
                                     Live
                                 </>
@@ -458,8 +458,8 @@ export default function SupplierDashboard() {
                     <Card>
                         <CardContent className="pt-6">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-emerald-500/10 rounded-lg">
-                                    <DollarSign className="w-6 h-6 text-emerald-500" />
+                                <div className="p-3 bg-[#009EE0]/10 rounded-lg">
+                                    <DollarSign className="w-6 h-6 text-[#009EE0]" />
                                 </div>
                                 <div>
                                     {statsLoading ? (

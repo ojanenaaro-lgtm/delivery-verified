@@ -84,7 +84,7 @@ export default function DeliveryIssues() {
                 );
             case 'resolved':
                 return (
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                    <Badge variant="secondary" className="bg-[#009EE0]/10 text-[#009EE0] hover:bg-[#009EE0]/10">
                         <Check className="w-3 h-3 mr-1" />
                         Resolved
                     </Badge>
@@ -206,7 +206,7 @@ export default function DeliveryIssues() {
                                                         {issue.status === 'pending_redelivery' && (
                                                             <Button
                                                                 size="sm"
-                                                                className="bg-[#00d4aa] hover:bg-[#00d4aa]/90"
+                                                                className="bg-[#009EE0] hover:bg-[#0088C4]"
                                                                 onClick={(e) => handleResolve(issue.id, e)}
                                                                 disabled={updateStatus.isPending}
                                                             >

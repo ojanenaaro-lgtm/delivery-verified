@@ -124,8 +124,8 @@ export default function ConnectedRestaurants() {
                     <Card>
                         <CardContent className="pt-6">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-emerald-500/10 rounded-lg">
-                                    <DollarSign className="w-6 h-6 text-emerald-500" />
+                                <div className="p-3 bg-[#009EE0]/10 rounded-lg">
+                                    <DollarSign className="w-6 h-6 text-[#009EE0]" />
                                 </div>
                                 <div>
                                     {isLoading ? (
@@ -207,7 +207,7 @@ export default function ConnectedRestaurants() {
                                             variant="secondary"
                                             className={
                                                 restaurant.discrepancyRate < 5
-                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    ? "bg-[#009EE0]/10 text-[#009EE0]"
                                                     : restaurant.discrepancyRate < 15
                                                     ? "bg-amber-100 text-amber-700"
                                                     : "bg-red-100 text-red-700"
