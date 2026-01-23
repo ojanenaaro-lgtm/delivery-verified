@@ -16,6 +16,8 @@ export interface Delivery {
     id: string;
     user_id: string;
     supplier_name: string;
+    supplier_id?: string | null;
+    restaurant_id?: string | null;
     delivery_date: string;
     order_number: string | null;
     total_value: number;

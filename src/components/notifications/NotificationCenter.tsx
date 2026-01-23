@@ -1,10 +1,5 @@
-import { Bell } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ConnectionRequestInbox } from './ConnectionRequestInbox';
 
 export function NotificationCenter() {
-    return (
-        <Button variant="ghost" size="icon">
-            <Bell className="w-5 h-5" />
-        </Button>
-    )
+    return <ConnectionRequestInbox />;
 }
