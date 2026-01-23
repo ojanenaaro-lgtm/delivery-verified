@@ -644,56 +644,48 @@ export interface ConnectedRestaurantWithProfile extends ConnectedRestaurant {
     profile: RestaurantProfile | null;
     discrepancyRate: number;
     issueCount: number;
+    connectionStatus?: 'pending' | 'active' | 'inactive';
+    connectedAt?: string | null;
 }
 
 /**
  * Get restaurants with their profile data and stats
+ * Uses restaurant_supplier_connections table for proper connection tracking
  */
 export function useSupplierRestaurantsWithProfiles() {
     const { user } = useUser();
     const supabase = useAuthenticatedSupabase();
-    const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
+    const supplierId = user?.id || '';
 
     return useQuery({
-        queryKey: ['supplier-restaurants-profiles', supplierName],
+        queryKey: ['supplier-restaurants-profiles', supplierId],
         queryFn: async () => {
-            // First get all deliveries for this supplier
-            const { data: deliveries, error: deliveriesError } = await supabase
-                .from('deliveries')
-                .select('user_id, total_value, missing_value, delivery_date, status')
-                .eq('supplier_name', supplierName);
+            if (!supplierId) return [];
 
-            if (deliveriesError) throw deliveriesError;
+            console.log('[SupplierData] Fetching connected restaurants for supplier:', supplierId);
 
-            if (!deliveries || deliveries.length === 0) {
-                // Fallback to mock data
-                const mockSupplier = mock.MOCK_SUPPLIERS.find(s =>
-                    s.name.toLowerCase().includes(supplierName.toLowerCase())
-                );
-                if (mockSupplier) {
-                    return mock.getRestaurantsForSupplier(mockSupplier.id).map(r => ({
-                        restaurantId: r.restaurantId,
-                        totalDeliveries: r.totalOrders,
-                        totalValue: r.totalRevenue,
-                        lastDeliveryDate: r.lastOrderDate ? r.lastOrderDate.toISOString() : null,
-                        profile: {
-                            id: r.restaurantId,
-                            name: r.restaurantName,
-                            contact_email: `contact@${r.restaurantName.toLowerCase().replace(/\s+/g, '')}.fi`,
-                            contact_phone: '+358 40 1234567',
-                            address: 'Ravintolakatu 1',
-                            city: 'Helsinki',
-                            postal_code: '00100',
-                        },
-                        discrepancyRate: r.discrepancyRate,
-                        issueCount: Math.floor(r.totalOrders * r.discrepancyRate / 100),
-                    } as ConnectedRestaurantWithProfile));
-                }
+            // First get ACTIVE connections from restaurant_supplier_connections table
+            const { data: connections, error: connectionsError } = await supabase
+                .from('restaurant_supplier_connections')
+                .select('restaurant_id, status, created_at')
+                .eq('supplier_id', supplierId)
+                .eq('status', 'active');
+
+            console.log('[SupplierData] Connections query result:', { connections, error: connectionsError });
+
+            if (connectionsError) {
+                console.error('[SupplierData] Error fetching connections:', connectionsError);
+                throw connectionsError;
+            }
+
+            if (!connections || connections.length === 0) {
+                console.log('[SupplierData] No connections found, returning empty array');
                 return [];
             }
 
-            // Get unique restaurant IDs
-            const restaurantIds = [...new Set(deliveries.map(d => d.user_id))];
+            // Get connected restaurant IDs
+            const restaurantIds = connections.map(c => c.restaurant_id);
+            console.log('[SupplierData] Connected restaurant IDs:', restaurantIds);
 
             // Fetch restaurant profiles
             const { data: profiles, error: profilesError } = await supabase
@@ -701,14 +693,23 @@ export function useSupplierRestaurantsWithProfiles() {
                 .select('*')
                 .in('id', restaurantIds);
 
-            if (profilesError) throw profilesError;
+            if (profilesError) {
+                console.error('[SupplierData] Error fetching profiles:', profilesError);
+                throw profilesError;
+            }
 
-            // Create a map of profiles by ID
-            const profileMap = new Map<string, RestaurantProfile>();
-            (profiles || []).forEach((p) => profileMap.set(p.id, p));
+            // Create a map of profiles and connection status
+            const connectionMap = new Map(connections.map(c => [c.restaurant_id, c]));
+
+            // Fetch deliveries for these restaurants from this supplier
+            const { data: deliveries } = await supabase
+                .from('deliveries')
+                .select('user_id, total_value, missing_value, delivery_date, status')
+                .eq('supplier_id', supplierId)
+                .in('user_id', restaurantIds);
 
             // Aggregate delivery data by restaurant
-            const restaurantMap = new Map<string, {
+            const deliveryMap = new Map<string, {
                 totalDeliveries: number;
                 totalValue: number;
                 totalMissing: number;
@@ -716,8 +717,8 @@ export function useSupplierRestaurantsWithProfiles() {
                 issueCount: number;
             }>();
 
-            deliveries.forEach((delivery) => {
-                const existing = restaurantMap.get(delivery.user_id);
+            (deliveries || []).forEach((delivery) => {
+                const existing = deliveryMap.get(delivery.user_id);
                 const hasIssue = Number(delivery.missing_value) > 0 || delivery.status === 'pending_redelivery';
 
                 if (existing) {
@@ -729,7 +730,7 @@ export function useSupplierRestaurantsWithProfiles() {
                         existing.lastDeliveryDate = delivery.delivery_date;
                     }
                 } else {
-                    restaurantMap.set(delivery.user_id, {
+                    deliveryMap.set(delivery.user_id, {
                         totalDeliveries: 1,
                         totalValue: Number(delivery.total_value) || 0,
                         totalMissing: Number(delivery.missing_value) || 0,
@@ -740,26 +741,128 @@ export function useSupplierRestaurantsWithProfiles() {
             });
 
             // Build final array with profiles
-            const result: ConnectedRestaurantWithProfile[] = [];
-            restaurantMap.forEach((data, restaurantId) => {
-                const profile = profileMap.get(restaurantId) || null;
-                const discrepancyRate = data.totalDeliveries > 0
-                    ? (data.issueCount / data.totalDeliveries) * 100
-                    : 0;
+            const result: ConnectedRestaurantWithProfile[] = (profiles || []).map(profile => {
+                const connection = connectionMap.get(profile.id);
+                const stats = deliveryMap.get(profile.id) || {
+                    totalDeliveries: 0,
+                    totalValue: 0,
+                    totalMissing: 0,
+                    lastDeliveryDate: null,
+                    issueCount: 0,
+                };
 
-                result.push({
-                    restaurantId,
-                    totalDeliveries: data.totalDeliveries,
-                    totalValue: data.totalValue,
-                    lastDeliveryDate: data.lastDeliveryDate,
-                    profile,
-                    discrepancyRate,
-                    issueCount: data.issueCount,
-                });
+                return {
+                    restaurantId: profile.id,
+                    connectionStatus: connection?.status || 'pending',
+                    connectedAt: connection?.created_at || null,
+                    totalDeliveries: stats.totalDeliveries,
+                    totalValue: stats.totalValue,
+                    lastDeliveryDate: stats.lastDeliveryDate,
+                    profile: profile as RestaurantProfile,
+                    discrepancyRate: stats.totalDeliveries > 0
+                        ? (stats.issueCount / stats.totalDeliveries) * 100
+                        : 0,
+                    issueCount: stats.issueCount,
+                };
             });
 
-            // Sort by total value (highest first)
-            return result.sort((a, b) => b.totalValue - a.totalValue);
+            console.log('[SupplierData] Returning restaurants:', result.length);
+            return result;
         },
     });
+}
+
+/**
+ * Hook for managing incoming connection requests (for suppliers)
+ */
+export function useConnectionRequests() {
+    const { user } = useUser();
+    const supabase = useAuthenticatedSupabase();
+    const queryClient = useQueryClient();
+    const supplierId = user?.id || '';
+
+    // Fetch pending connection requests
+    const pendingRequestsQuery = useQuery({
+        queryKey: ['connection-requests', supplierId],
+        queryFn: async () => {
+            if (!supplierId) return [];
+
+            const { data, error } = await supabase
+                .from('restaurant_supplier_connections')
+                .select(`
+                    id,
+                    restaurant_id,
+                    supplier_id,
+                    status,
+                    created_at
+                `)
+                .eq('supplier_id', supplierId)
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Fetch restaurant profiles for these requests
+            if (!data || data.length === 0) return [];
+
+            const restaurantIds = data.map(d => d.restaurant_id);
+            const { data: profiles } = await supabase
+                .from('restaurants')
+                .select('*')
+                .in('id', restaurantIds);
+
+            const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+            return data.map(request => ({
+                ...request,
+                restaurant: profileMap.get(request.restaurant_id) || null,
+            }));
+        },
+        enabled: !!supplierId,
+    });
+
+    // Accept connection request
+    const acceptMutation = useMutation({
+        mutationFn: async (connectionId: string) => {
+            const { data, error } = await supabase
+                .from('restaurant_supplier_connections')
+                .update({ status: 'active' })
+                .eq('id', connectionId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['connection-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['supplier-restaurants-profiles'] });
+        },
+    });
+
+    // Decline connection request
+    const declineMutation = useMutation({
+        mutationFn: async (connectionId: string) => {
+            const { error } = await supabase
+                .from('restaurant_supplier_connections')
+                .delete()
+                .eq('id', connectionId);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['connection-requests'] });
+        },
+    });
+
+    return {
+        pendingRequests: pendingRequestsQuery.data || [],
+        isLoading: pendingRequestsQuery.isLoading,
+        error: pendingRequestsQuery.error,
+        acceptRequest: acceptMutation.mutateAsync,
+        isAccepting: acceptMutation.isPending,
+        declineRequest: declineMutation.mutateAsync,
+        isDeclining: declineMutation.isPending,
+        refetch: pendingRequestsQuery.refetch,
+    };
 }

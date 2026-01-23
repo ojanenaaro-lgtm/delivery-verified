@@ -12,14 +12,19 @@ import {
     TrendingDown,
     Loader2,
     AlertTriangle,
-    Building2
+    Building2,
+    Check,
+    X,
+    Bell
 } from 'lucide-react';
 import MainContent from '@/components/layout/MainContent';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { useSupplierRestaurantsWithProfiles, useSupplierStats } from '@/hooks/useSupplierData';
+import { Button } from '@/components/ui/button';
+import { useSupplierRestaurantsWithProfiles, useSupplierStats, useConnectionRequests } from '@/hooks/useSupplierData';
 import { ConnectButton } from '@/components/connections/ConnectButton';
+import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 
@@ -35,6 +40,7 @@ interface SearchedRestaurant {
 
 export default function ConnectedRestaurants() {
     const supabase = useAuthenticatedSupabase();
+    const { toast } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [searchResults, setSearchResults] = useState<SearchedRestaurant[]>([]);
@@ -42,6 +48,48 @@ export default function ConnectedRestaurants() {
 
     const { data: restaurants, isLoading, error } = useSupplierRestaurantsWithProfiles();
     const { data: stats } = useSupplierStats();
+    const {
+        pendingRequests,
+        isLoading: isLoadingRequests,
+        acceptRequest,
+        isAccepting,
+        declineRequest,
+        isDeclining,
+    } = useConnectionRequests();
+
+    // Handle accept connection request
+    const handleAccept = async (connectionId: string, restaurantName: string) => {
+        try {
+            await acceptRequest(connectionId);
+            toast({
+                title: 'Connection Accepted',
+                description: `You are now connected with ${restaurantName}.`,
+            });
+        } catch {
+            toast({
+                title: 'Error',
+                description: 'Failed to accept connection request.',
+                variant: 'destructive',
+            });
+        }
+    };
+
+    // Handle decline connection request
+    const handleDecline = async (connectionId: string, restaurantName: string) => {
+        try {
+            await declineRequest(connectionId);
+            toast({
+                title: 'Connection Declined',
+                description: `Connection request from ${restaurantName} was declined.`,
+            });
+        } catch {
+            toast({
+                title: 'Error',
+                description: 'Failed to decline connection request.',
+                variant: 'destructive',
+            });
+        }
+    };
 
     // Debounce search query (300ms)
     useEffect(() => {
@@ -324,6 +372,106 @@ export default function ConnectedRestaurants() {
                                 </CardContent>
                             </Card>
                         )}
+                    </div>
+                )}
+
+                {/* Pending Connection Requests Section */}
+                {pendingRequests.length > 0 && (
+                    <div className="mb-8">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Bell className="w-5 h-5 text-amber-500" />
+                            <h2 className="text-lg font-semibold text-foreground">
+                                Pending Connection Requests ({pendingRequests.length})
+                            </h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {pendingRequests.map((request) => (
+                                <Card key={request.id} className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-900/50">
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex-1">
+                                                <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                                                    <Building2 className="w-5 h-5 text-amber-500" />
+                                                    {request.restaurant?.name || 'Unknown Restaurant'}
+                                                </h3>
+                                                {(request.restaurant?.city || request.restaurant?.street_address) && (
+                                                    <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                                        <MapPin className="w-3 h-3" />
+                                                        {request.restaurant?.street_address}
+                                                        {request.restaurant?.street_address && request.restaurant?.city && ', '}
+                                                        {request.restaurant?.city}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400">
+                                                Pending
+                                            </Badge>
+                                        </div>
+
+                                        {/* Contact Info */}
+                                        {(request.restaurant?.contact_email || request.restaurant?.contact_phone) && (
+                                            <div className="flex flex-col gap-1 mb-4 text-sm text-muted-foreground">
+                                                {request.restaurant?.contact_email && (
+                                                    <span className="flex items-center gap-1">
+                                                        <Mail className="w-3 h-3" />
+                                                        {request.restaurant.contact_email}
+                                                    </span>
+                                                )}
+                                                {request.restaurant?.contact_phone && (
+                                                    <span className="flex items-center gap-1">
+                                                        <Phone className="w-3 h-3" />
+                                                        {request.restaurant.contact_phone}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Request date */}
+                                        <p className="text-sm text-muted-foreground flex items-center gap-1 mb-4">
+                                            <Calendar className="w-3 h-3" />
+                                            Requested: {format(new Date(request.created_at), 'MMM d, yyyy')}
+                                        </p>
+
+                                        {/* Accept/Decline Buttons */}
+                                        <div className="flex gap-2 pt-4 border-t border-amber-200 dark:border-amber-900/50">
+                                            <Button
+                                                variant="default"
+                                                size="sm"
+                                                className="flex-1 bg-[#009EE0] hover:bg-[#0080B8] text-white"
+                                                onClick={() => handleAccept(request.id, request.restaurant?.name || 'Restaurant')}
+                                                disabled={isAccepting || isDeclining}
+                                            >
+                                                {isAccepting ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <Check className="w-4 h-4 mr-1" />
+                                                        Accept
+                                                    </>
+                                                )}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                                                onClick={() => handleDecline(request.id, request.restaurant?.name || 'Restaurant')}
+                                                disabled={isAccepting || isDeclining}
+                                            >
+                                                {isDeclining ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <X className="w-4 h-4 mr-1" />
+                                                        Decline
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
                     </div>
                 )}
 

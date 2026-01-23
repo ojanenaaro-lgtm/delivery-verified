@@ -23,11 +23,23 @@ export function useAuthenticatedSupabase(): SupabaseClient {
       global: {
         fetch: async (url, options = {}) => {
           // Get fresh Clerk token for each request
-          const token = await session?.getToken({ template: 'supabase' });
+          // Try 'supabase' template first, fall back to default session token
+          let token = await session?.getToken({ template: 'supabase' }).catch(() => null);
+
+          if (!token) {
+            // Fallback: use default session token if 'supabase' template doesn't exist
+            token = await session?.getToken().catch(() => null);
+            if (token) {
+              console.warn('Using default Clerk token. For proper RLS, create a JWT template named "supabase" in Clerk dashboard.');
+            }
+          }
+
           const headers = new Headers(options.headers);
 
           if (token) {
             headers.set('Authorization', `Bearer ${token}`);
+          } else {
+            console.warn('No auth token available - RLS policies may block access');
           }
 
           return fetch(url, { ...options, headers });
