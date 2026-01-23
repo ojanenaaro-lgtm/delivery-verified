@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText, Save } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText, Star, ExternalLink } from 'lucide-react';
 import { useSession } from '@clerk/clerk-react';
-import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
@@ -14,8 +13,20 @@ import { ScannedItem } from '@/components/receipt/ScannedItemsTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/lib/supabase';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
 import { Delivery } from '@/types/delivery';
+import { useMissingItemsReport } from '@/hooks/useMissingItemsReport';
+
+// Supplier type for dropdown
+interface SupplierOption {
+  id: string;
+  name: string;
+  is_major_tukku: boolean;
+  priority_order: number | null;
+  is_connected: boolean;
+}
 
 type PageStep = 'upload' | 'processing' | 'verify' | 'complete';
 
@@ -64,6 +75,7 @@ export default function UploadReceiptPage() {
   const { session } = useSession();
   const navigate = useNavigate();
   const { deliveryId } = useParams();
+  const supabase = useAuthenticatedSupabase();
 
   const [step, setStep] = useState<PageStep>('upload');
   const [fakeProgress, setFakeProgress] = useState(0);
@@ -80,6 +92,15 @@ export default function UploadReceiptPage() {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [items, setItems] = useState<ScannedItem[]>([]);
+
+  // Supplier selection state
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+  const [createdReportId, setCreatedReportId] = useState<string | null>(null);
+
+  // Missing items report hook
+  const { createReport, isCreatingReport } = useMissingItemsReport();
 
   // Real progress based on pages completed + small initial boost for perceived speed
   useEffect(() => {
@@ -105,6 +126,65 @@ export default function UploadReceiptPage() {
       return () => clearTimeout(timer);
     }
   }, [pagesCompleted, totalPages, step]);
+
+  // Load suppliers for dropdown
+  useEffect(() => {
+    const loadSuppliers = async () => {
+      if (!user?.id) return;
+
+      setIsLoadingSuppliers(true);
+      try {
+        // Fetch all suppliers
+        const { data: allSuppliers, error: suppliersError } = await supabase
+          .from('suppliers')
+          .select('id, name, is_major_tukku, priority_order')
+          .order('priority_order', { ascending: true, nullsFirst: false })
+          .order('name', { ascending: true });
+
+        if (suppliersError) throw suppliersError;
+
+        // Fetch connected suppliers for this restaurant
+        const { data: connections, error: connectionsError } = await supabase
+          .from('restaurant_supplier_connections')
+          .select('supplier_id')
+          .eq('restaurant_id', user.id)
+          .eq('status', 'active');
+
+        if (connectionsError) throw connectionsError;
+
+        const connectedIds = new Set((connections || []).map(c => c.supplier_id));
+
+        // Map suppliers with connection status
+        const supplierOptions: SupplierOption[] = (allSuppliers || []).map(s => ({
+          id: s.id,
+          name: s.name,
+          is_major_tukku: s.is_major_tukku || false,
+          priority_order: s.priority_order,
+          is_connected: connectedIds.has(s.id),
+        }));
+
+        // Sort: connected first, then major tukkus, then by priority/name
+        supplierOptions.sort((a, b) => {
+          if (a.is_connected !== b.is_connected) return a.is_connected ? -1 : 1;
+          if (a.is_major_tukku !== b.is_major_tukku) return a.is_major_tukku ? -1 : 1;
+          if (a.priority_order !== b.priority_order) {
+            if (a.priority_order === null) return 1;
+            if (b.priority_order === null) return -1;
+            return a.priority_order - b.priority_order;
+          }
+          return a.name.localeCompare(b.name);
+        });
+
+        setSuppliers(supplierOptions);
+      } catch (err) {
+        console.error('Error loading suppliers:', err);
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+
+    loadSuppliers();
+  }, [user?.id, supabase]);
 
   // Load existing delivery if deliveryId is provided
   useEffect(() => {
@@ -162,7 +242,7 @@ export default function UploadReceiptPage() {
     };
 
     loadDelivery();
-  }, [deliveryId, navigate]);
+  }, [deliveryId, navigate, supabase]);
 
   if (!user) return null;
 
@@ -227,9 +307,22 @@ export default function UploadReceiptPage() {
 
         // Update header info from first page
         if (index === 0) {
-          setSupplierName(data.supplier_name || '');
+          const extractedSupplierName = data.supplier_name || '';
+          setSupplierName(extractedSupplierName);
           setDeliveryDate(data.date || new Date().toISOString().split('T')[0]);
           setOrderNumber(data.order_number || `INV-${Date.now()}`);
+
+          // Auto-match supplier from extracted name
+          if (extractedSupplierName && suppliers.length > 0) {
+            const normalizedName = extractedSupplierName.toLowerCase().trim();
+            const matchedSupplier = suppliers.find(s =>
+              s.name.toLowerCase().includes(normalizedName) ||
+              normalizedName.includes(s.name.toLowerCase())
+            );
+            if (matchedSupplier) {
+              setSelectedSupplierId(matchedSupplier.id);
+            }
+          }
         }
 
         return { success: true, data };
@@ -306,6 +399,7 @@ export default function UploadReceiptPage() {
       restaurant_id: user.id,
       user_id: user.id,
       supplier_name: currentSupplierName,
+      supplier_id: selectedSupplierId || null,
       delivery_date: currentDeliveryDate,
       order_number: currentOrderNumber,
       total_value: totalValue,
@@ -380,14 +474,58 @@ export default function UploadReceiptPage() {
       return;
     }
 
+    // Check if supplier is selected (required for report creation)
+    if (!selectedSupplierId) {
+      toast.error('Please select a supplier', {
+        description: 'Supplier selection is required to complete verification',
+      });
+      return;
+    }
+
     try {
       setIsProcessing(true);
-      const { missingValue } = await saveDelivery('complete');
+      const { deliveryId: savedDeliveryId, missingValue } = await saveDelivery('complete');
+
+      // Check for missing items and create report if any exist
+      const missingItems = items.filter(
+        item => item.status === 'missing' && item.missingQuantity && item.missingQuantity > 0
+      );
+
+      if (missingItems.length > 0 && selectedSupplierId) {
+        try {
+          // Create missing items report
+          const reportResult = await createReport({
+            deliveryId: savedDeliveryId,
+            supplierId: selectedSupplierId,
+            missingItems: missingItems.map(item => ({
+              item_name: item.name,
+              expected_quantity: item.quantity,
+              received_quantity: item.receivedQuantity ?? 0,
+              missing_quantity: item.missingQuantity ?? 0,
+              unit: item.unit || null,
+              price_per_unit: item.pricePerUnit,
+            })),
+          });
+
+          setCreatedReportId(reportResult.report.id);
+
+          const supplierOption = suppliers.find(s => s.id === selectedSupplierId);
+          toast.success('Missing items report sent!', {
+            description: `${missingItems.length} item(s) (${missingValue.toFixed(2)}) reported to ${supplierOption?.name || 'supplier'}`,
+          });
+        } catch (reportErr) {
+          console.error('Error creating missing items report:', reportErr);
+          toast.error('Verification saved, but failed to send report', {
+            description: 'The delivery was saved but the missing items report could not be created',
+          });
+        }
+      }
+
       setStep('complete');
 
       if (missingValue > 0) {
         toast.success('Verification complete!', {
-          description: `Discrepancy of €${missingValue.toFixed(2)} reported to supplier`,
+          description: `Discrepancy of ${missingValue.toFixed(2)} reported to supplier`,
         });
       } else {
         toast.success('Delivery verified!', {
@@ -510,18 +648,99 @@ export default function UploadReceiptPage() {
                 {/* Delivery Info */}
                 <div className="bg-card rounded-xl border border-border p-6">
                   <h2 className="text-lg font-semibold text-foreground mb-4">Delivery Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Supplier Selection Dropdown */}
+                    <div className="space-y-2 md:col-span-2">
                       <Label className="flex items-center gap-2">
                         <Building2 size={16} className="text-muted-foreground" />
-                        Supplier
+                        Which supplier is this delivery from? <span className="text-destructive">*</span>
                       </Label>
-                      <Input
-                        value={supplierName}
-                        onChange={(e) => setSupplierName(e.target.value)}
-                        placeholder="Supplier name"
-                      />
+                      <Select
+                        value={selectedSupplierId}
+                        onValueChange={(value) => {
+                          setSelectedSupplierId(value);
+                          const selected = suppliers.find(s => s.id === value);
+                          if (selected) setSupplierName(selected.name);
+                        }}
+                      >
+                        <SelectTrigger className={!selectedSupplierId ? 'border-destructive/50' : ''}>
+                          <SelectValue placeholder={isLoadingSuppliers ? 'Loading suppliers...' : 'Select a supplier'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {/* Connected Suppliers */}
+                          {suppliers.some(s => s.is_connected) && (
+                            <>
+                              <SelectGroup>
+                                <SelectLabel>Your Connected Suppliers</SelectLabel>
+                                {suppliers.filter(s => s.is_connected).map(s => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    <span className="flex items-center gap-2">
+                                      {s.name}
+                                      <Badge variant="outline" className="text-xs">Connected</Badge>
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                              <SelectSeparator />
+                            </>
+                          )}
+
+                          {/* Featured Partner - Metro-tukku */}
+                          {suppliers.some(s => s.name.toLowerCase().includes('metro')) && (
+                            <>
+                              <SelectGroup>
+                                <SelectLabel className="flex items-center gap-1">
+                                  <Star size={12} className="text-yellow-500" />
+                                  Featured Partner
+                                </SelectLabel>
+                                {suppliers.filter(s => s.name.toLowerCase().includes('metro')).map(s => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    <span className="flex items-center gap-2">
+                                      {s.name}
+                                      <Badge className="bg-yellow-500/10 text-yellow-600 text-xs">Featured</Badge>
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                              <SelectSeparator />
+                            </>
+                          )}
+
+                          {/* Major Tukkus */}
+                          {suppliers.some(s => s.is_major_tukku && !s.is_connected && !s.name.toLowerCase().includes('metro')) && (
+                            <>
+                              <SelectGroup>
+                                <SelectLabel>Major Suppliers</SelectLabel>
+                                {suppliers
+                                  .filter(s => s.is_major_tukku && !s.is_connected && !s.name.toLowerCase().includes('metro'))
+                                  .map(s => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectGroup>
+                              <SelectSeparator />
+                            </>
+                          )}
+
+                          {/* Other Suppliers */}
+                          <SelectGroup>
+                            <SelectLabel>All Suppliers</SelectLabel>
+                            {suppliers
+                              .filter(s => !s.is_connected && !s.is_major_tukku)
+                              .map(s => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      {!selectedSupplierId && (
+                        <p className="text-xs text-destructive">Required - select the supplier for this delivery</p>
+                      )}
                     </div>
+
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Calendar size={16} className="text-muted-foreground" />
@@ -586,11 +805,22 @@ export default function UploadReceiptPage() {
                   <div className="bg-destructive/10 rounded-xl p-4 mt-4 mb-8 text-center">
                     <p className="text-sm text-destructive">Discrepancy Reported</p>
                     <p className="text-2xl font-bold font-mono text-destructive">
-                      €{missingValue.toFixed(2)}
+                      {missingValue.toFixed(2)}
                     </p>
                     <p className="text-xs text-destructive/80 mt-1">
-                      A report has been sent to the supplier
+                      Missing items report sent to {suppliers.find(s => s.id === selectedSupplierId)?.name || 'supplier'}
                     </p>
+                    {createdReportId && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="mt-2 text-destructive"
+                        onClick={() => navigate(`/reports/${createdReportId}`)}
+                      >
+                        <ExternalLink size={14} className="mr-1" />
+                        View Report Details
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="bg-success/10 rounded-xl p-4 mt-4 mb-8 text-center">
