@@ -36,20 +36,16 @@ export default function OnboardingPage() {
 
     const handleSkip = useCallback(async () => {
         if (isSkipping) return;
-        setIsSkipping(true);
 
-        localStorage.setItem('deliveri_onboarding_completed', 'true');
-
-        // Try to set default role for better persistence
-        try {
-            await updateUserMetadata({ role: 'restaurant' });
-        } catch (error) {
-            // Silently fail - localStorage fallback will work
-            console.warn('Could not set default role:', error);
+        // If we're not in role-select, take them to role-select
+        if (phase !== 'role-select') {
+            setPhase('role-select');
+            return;
         }
 
-        navigate('/dashboard', { replace: true });
-    }, [isSkipping, updateUserMetadata, navigate]);
+        // If they are already in role-select, they MUST pick a role.
+        // The Skip button should be hidden in this phase anyway.
+    }, [isSkipping, phase]);
 
     const handleWelcomeNext = () => {
         setPhase('features');
@@ -128,12 +124,14 @@ export default function OnboardingPage() {
                         currentStep={currentStepIndex}
                         totalSteps={totalSteps}
                     />
-                    <button
-                        onClick={handleSkip}
-                        className="absolute right-6 text-sm font-medium text-[#009EE0] hover:text-[#0088C4] transition-colors"
-                    >
-                        Skip
-                    </button>
+                    {phase !== 'role-select' && (
+                        <button
+                            onClick={handleSkip}
+                            className="absolute right-6 text-sm font-medium text-[#009EE0] hover:text-[#0088C4] transition-colors"
+                        >
+                            Skip
+                        </button>
+                    )}
                 </header>
             )}
 
