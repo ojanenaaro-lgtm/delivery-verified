@@ -662,8 +662,6 @@ export function useSupplierRestaurantsWithProfiles() {
         queryFn: async () => {
             if (!supplierId) return [];
 
-            console.log('[SupplierData] Fetching connected restaurants for supplier:', supplierId);
-
             // First get ACTIVE connections from restaurant_supplier_connections table
             const { data: connections, error: connectionsError } = await supabase
                 .from('restaurant_supplier_connections')
@@ -671,21 +669,16 @@ export function useSupplierRestaurantsWithProfiles() {
                 .eq('supplier_id', supplierId)
                 .eq('status', 'active');
 
-            console.log('[SupplierData] Connections query result:', { connections, error: connectionsError });
-
             if (connectionsError) {
-                console.error('[SupplierData] Error fetching connections:', connectionsError);
                 throw connectionsError;
             }
 
             if (!connections || connections.length === 0) {
-                console.log('[SupplierData] No connections found, returning empty array');
                 return [];
             }
 
             // Get connected restaurant IDs
             const restaurantIds = connections.map(c => c.restaurant_id);
-            console.log('[SupplierData] Connected restaurant IDs:', restaurantIds);
 
             // Fetch restaurant profiles
             const { data: profiles, error: profilesError } = await supabase
@@ -694,7 +687,6 @@ export function useSupplierRestaurantsWithProfiles() {
                 .in('id', restaurantIds);
 
             if (profilesError) {
-                console.error('[SupplierData] Error fetching profiles:', profilesError);
                 throw profilesError;
             }
 
@@ -766,7 +758,6 @@ export function useSupplierRestaurantsWithProfiles() {
                 };
             });
 
-            console.log('[SupplierData] Returning restaurants:', result.length);
             return result;
         },
     });

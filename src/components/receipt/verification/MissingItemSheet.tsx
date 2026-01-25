@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Search } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Drawer,
     DrawerClose,
@@ -93,15 +91,15 @@ export function MissingItemSheet({
 
                         {/* Quick Buttons */}
                         <div className="grid grid-cols-4 gap-2">
-                            {[1, 2, 3].map((num) => (
+                            {[1, 3, 6].map((num) => (
                                 <Button
                                     key={num}
-                                    variant={quantity === num ? 'default' : 'outline'}
-                                    onClick={() => setQuantity(num)}
-                                    disabled={num > item.quantity}
+                                    variant="outline"
+                                    onClick={() => setQuantity(Math.min(quantity + num, item.quantity))}
+                                    disabled={quantity >= item.quantity}
                                     className="h-12"
                                 >
-                                    {num}
+                                    +{num}
                                 </Button>
                             ))}
                             <Button

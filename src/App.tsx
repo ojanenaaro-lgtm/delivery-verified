@@ -20,6 +20,7 @@ import DeliveryDetailPage from "./pages/DeliveryDetailPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
+import RestaurantProfilePage from "./pages/RestaurantProfilePage";
 import UploadReceiptPage from "./pages/UploadReceiptPage";
 import NotFound from "./pages/NotFound";
 import OnboardingPage from "./components/onboarding/OnboardingPage";
@@ -106,6 +107,7 @@ function AppRoutes() {
       <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
       <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/restaurant/profile" element={<ProtectedRoute><RestaurantProfilePage /></ProtectedRoute>} />
       <Route path="/extract-receipt" element={<ProtectedRoute><UploadReceiptPage /></ProtectedRoute>} />
       <Route path="/verify-delivery/:deliveryId" element={<ProtectedRoute><UploadReceiptPage /></ProtectedRoute>} />
 

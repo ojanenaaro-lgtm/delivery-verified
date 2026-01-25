@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, UserRole as AuthRole } from '@/contexts/AuthContext';
+import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
+import { useUser } from '@clerk/clerk-react';
 
 interface RoleSelectStepProps {
     onNext: () => void;
@@ -25,6 +27,8 @@ type UserRole = 'restaurant' | 'supplier' | null;
 
 export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) {
     const { updateUserMetadata } = useAuth();
+    const { user: clerkUser } = useUser();
+    const supabase = useAuthenticatedSupabase();
     const [selectedRole, setSelectedRole] = useState<UserRole>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -45,11 +49,33 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                     setIsSubmitting(false);
                     return;
                 }
-                // Save restaurant data here
+                // Save restaurant data to Clerk metadata
                 await updateUserMetadata({
                     role: 'restaurant' as AuthRole,
                     companyName: restaurantName,
                 });
+
+                // Sync restaurant profile to Supabase for suppliers to see
+                if (clerkUser?.id) {
+                    const { error: dbError } = await supabase
+                        .from('restaurants')
+                        .upsert({
+                            id: clerkUser.id,
+                            name: restaurantName.trim(),
+                            contact_email: clerkUser.primaryEmailAddress?.emailAddress || null,
+                            contact_phone: restaurantPhone.trim() || null,
+                            street_address: restaurantAddress.trim() || null,
+                            updated_at: new Date().toISOString(),
+                        }, {
+                            onConflict: 'id'
+                        });
+
+                    if (dbError) {
+                        console.error('Failed to sync restaurant to database:', dbError);
+                        // Don't block onboarding, but log the error
+                    }
+                }
+
                 toast.success('Welcome to DeliVeri!');
                 onNext();
             } else if (selectedRole === 'supplier') {
@@ -58,11 +84,31 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                     setIsSubmitting(false);
                     return;
                 }
-                // Save supplier data here
+                // Save supplier data to Clerk metadata
                 await updateUserMetadata({
                     role: 'supplier' as AuthRole,
                     companyName: companyName,
                 });
+
+                // Sync supplier profile to Supabase
+                if (clerkUser?.id) {
+                    const { error: dbError } = await supabase
+                        .from('suppliers')
+                        .upsert({
+                            id: clerkUser.id,
+                            name: companyName.trim(),
+                            contact_email: clerkUser.primaryEmailAddress?.emailAddress || null,
+                            updated_at: new Date().toISOString(),
+                        }, {
+                            onConflict: 'id'
+                        });
+
+                    if (dbError) {
+                        console.error('Failed to sync supplier to database:', dbError);
+                        // Don't block onboarding, but log the error
+                    }
+                }
+
                 toast.success('Welcome to DeliVeri!');
                 onNext();
             }

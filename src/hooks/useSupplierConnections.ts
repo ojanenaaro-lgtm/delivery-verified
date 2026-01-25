@@ -39,13 +39,11 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
   // Fetch connected suppliers with JOIN on suppliers table
   const fetchConnectedSuppliers = useCallback(async () => {
     if (!user?.id) {
-      console.log('[SupplierConnections] No user ID for connected suppliers');
       return;
     }
 
     try {
       setLoadingConnections(true);
-      console.log('[SupplierConnections] Fetching connected suppliers for:', user.id);
 
       const { data, error } = await supabase
         .from('restaurant_supplier_connections')
@@ -69,8 +67,6 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
         `)
         .eq('restaurant_id', user.id)
         .order('created_at', { ascending: false });
-
-      console.log('[SupplierConnections] Connected suppliers result:', { data, error, count: data?.length });
 
       if (error) throw error;
 
@@ -109,13 +105,11 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
   // Fetch available suppliers (not yet connected)
   const fetchAvailableSuppliers = useCallback(async () => {
     if (!user?.id) {
-      console.log('[SupplierConnections] No user ID, skipping fetch');
       return;
     }
 
     try {
       setLoadingAvailable(true);
-      console.log('[SupplierConnections] Fetching available suppliers for user:', user.id);
 
       // First get connected supplier IDs
       const { data: connections, error: connError } = await supabase
@@ -123,12 +117,9 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
         .select('supplier_id')
         .eq('restaurant_id', user.id);
 
-      console.log('[SupplierConnections] Connections:', { connections, error: connError });
-
       if (connError) throw connError;
 
       const connectedIds = (connections || []).map(c => c.supplier_id);
-      console.log('[SupplierConnections] Already connected IDs:', connectedIds);
 
       // Then fetch all suppliers (no filtering for now to debug)
       const { data, error } = await supabase
@@ -138,13 +129,10 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
         .order('priority_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
 
-      console.log('[SupplierConnections] All suppliers from DB:', { count: data?.length, error, first: data?.[0] });
-
       if (error) throw error;
 
       // Filter out connected suppliers in JS instead of SQL (more reliable)
       const available = (data || []).filter(s => !connectedIds.includes(s.id));
-      console.log('[SupplierConnections] Available after filtering:', available.length);
 
       setAvailableSuppliers(available);
     } catch (error) {

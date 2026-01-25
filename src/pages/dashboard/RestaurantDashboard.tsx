@@ -4,8 +4,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Delivery } from '@/types/delivery';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
+import { useProfileCompletionCheck } from '@/hooks/useProfileCompletionCheck';
 import { useNavigate } from 'react-router-dom';
 import MainContent from '@/components/layout/MainContent';
+import { ProfileCompletionModal } from '@/components/ProfileCompletionModal';
 import { format, isToday } from 'date-fns';
 import { useAuth as useClerkAuth } from '@clerk/clerk-react';
 
@@ -14,9 +16,18 @@ export default function RestaurantDashboard() {
   const { userId } = useClerkAuth();
   const navigate = useNavigate();
   const supabase = useAuthenticatedSupabase();
+  const { needsProfileUpdate, dismissPrompt, clearDismissal } = useProfileCompletionCheck();
 
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Show profile completion modal when needed
+  useEffect(() => {
+    if (needsProfileUpdate) {
+      setShowProfileModal(true);
+    }
+  }, [needsProfileUpdate]);
 
   // Fetch deliveries from Supabase
   useEffect(() => {
@@ -50,6 +61,16 @@ export default function RestaurantDashboard() {
   const pendingDeliveries = useMemo(() => {
     return deliveries.filter(d => d.status === 'draft');
   }, [deliveries]);
+
+  const handleProfileModalClose = () => {
+    setShowProfileModal(false);
+    dismissPrompt(); // Sets 24-hour dismissal
+  };
+
+  const handleProfileSaved = () => {
+    setShowProfileModal(false);
+    clearDismissal(); // Clear dismissal since profile is now complete
+  };
 
   if (!user) return null;
 
@@ -159,6 +180,13 @@ export default function RestaurantDashboard() {
           </div>
         </div>
       </MainContent>
+
+      {/* Profile Completion Modal */}
+      <ProfileCompletionModal
+        isOpen={showProfileModal}
+        onClose={handleProfileModalClose}
+        onSaved={handleProfileSaved}
+      />
     </AppLayout>
   );
 }

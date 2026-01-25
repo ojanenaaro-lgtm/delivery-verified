@@ -154,11 +154,8 @@ export function useSupplierReportsList(filters?: ReportFilters) {
         queryKey: ['supplier-reports', supplierId, filters],
         queryFn: async (): Promise<MissingItemsReportWithRestaurant[]> => {
             if (!supplierId) {
-                console.log('[SupplierReports] No supplier ID');
                 return [];
             }
-
-            console.log('[SupplierReports] Fetching reports for supplier:', supplierId);
 
             // Build the query
             let query = supabase
@@ -174,14 +171,10 @@ export function useSupplierReportsList(filters?: ReportFilters) {
 
             const { data: reports, error } = await query;
 
-            console.log('[SupplierReports] Query result:', { reports, error, count: reports?.length });
-
             if (error) {
-                console.error('[SupplierReports] Query error:', error);
                 throw error;
             }
             if (!reports || reports.length === 0) {
-                console.log('[SupplierReports] No reports found');
                 return [];
             }
 

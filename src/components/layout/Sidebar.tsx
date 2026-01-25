@@ -43,6 +43,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         { icon: Package, label: 'Deliveries', path: '/deliveries' },
         { icon: BarChart3, label: 'Analytics', path: '/analytics' },
         { icon: Building2, label: 'Suppliers', path: '/suppliers' },
+        { icon: Store, label: 'Profile', path: '/restaurant/profile' },
         { icon: Settings, label: 'Settings', path: '/settings' },
     ];
 
@@ -78,9 +79,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         navigate(path);
         onNavigate?.();
     };
-
-    // Primary accent color (Wolt Blue)
-    const primaryColor = '#009DE0';
 
     return (
         <div className="flex flex-col h-full bg-card border-r border-border">
