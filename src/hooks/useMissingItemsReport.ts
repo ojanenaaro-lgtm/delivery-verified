@@ -28,6 +28,7 @@ export interface MissingItemsReport {
   created_at: string;
   acknowledged_at: string | null;
   resolved_at: string | null;
+  last_action_by?: string | null;
 }
 
 export interface MissingItemsReportWithItems extends MissingItemsReport {
@@ -81,11 +82,12 @@ export function useMissingItemsReport() {
         .from('missing_items_reports')
         .insert({
           delivery_id: input.deliveryId,
-          restaurant_id: user.id,
+          restaurant_id: user.businessId,
           supplier_id: input.supplierId,
           status: 'pending',
           total_missing_value: totalMissingValue,
           items_count: itemsCount,
+          last_action_by: user.id
         })
         .select()
         .single();
@@ -148,7 +150,7 @@ export function useMissingItemsReport() {
             contact_email
           )
         `)
-        .eq('restaurant_id', user.id)
+        .eq('restaurant_id', user.businessId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -275,7 +277,7 @@ export function useSupplierMissingItemsReports() {
   const getReportsQuery = useQuery({
     queryKey: ['missing-items-reports', 'supplier', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!user?.businessId) return [];
 
       const { data, error } = await supabase
         .from('missing_items_reports')
@@ -287,7 +289,7 @@ export function useSupplierMissingItemsReports() {
             contact_email
           )
         `)
-        .eq('supplier_id', user.id)
+        .eq('supplier_id', user.businessId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -310,6 +312,7 @@ export function useSupplierMissingItemsReports() {
         .update({
           status: 'acknowledged',
           acknowledged_at: new Date().toISOString(),
+          last_action_by: user?.id
         })
         .eq('id', reportId)
         .select()
@@ -334,6 +337,7 @@ export function useSupplierMissingItemsReports() {
           status: 'resolved',
           resolved_at: new Date().toISOString(),
           notes: notes || null,
+          last_action_by: user?.id
         })
         .eq('id', reportId)
         .select()

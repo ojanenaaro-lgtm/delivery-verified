@@ -39,6 +39,41 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
 
     // Supplier form state
     const [companyName, setCompanyName] = useState('');
+    const [supplierSubMode, setSupplierSubMode] = useState<'create' | 'join' | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [existingSuppliers, setExistingSuppliers] = useState<{ id: string, name: string }[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    const searchSuppliers = async (query: string) => {
+        if (!query.trim()) {
+            setExistingSuppliers([]);
+            return;
+        }
+
+        setIsSearching(true);
+        try {
+            const { data, error } = await supabase
+                .from('suppliers')
+                .select('id, name')
+                .ilike('name', `%${query}%`)
+                .limit(5);
+
+            // Deduplicate by name
+            const unique: { id: string, name: string }[] = [];
+            const seen = new Set();
+            for (const s of (data || [])) {
+                if (!seen.has(s.name)) {
+                    unique.push(s);
+                    seen.add(s.name);
+                }
+            }
+            setExistingSuppliers(unique);
+        } catch (error) {
+            console.error('Error searching suppliers:', error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
@@ -53,6 +88,7 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                 await updateUserMetadata({
                     role: 'restaurant' as AuthRole,
                     companyName: restaurantName,
+                    businessId: clerkUser?.id || '',
                 });
 
                 // Sync restaurant profile to Supabase for suppliers to see
@@ -79,34 +115,63 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                 toast.success('Welcome to DeliVeri!');
                 onNext();
             } else if (selectedRole === 'supplier') {
-                if (!companyName.trim()) {
-                    toast.error('Please enter your company name');
-                    setIsSubmitting(false);
-                    return;
-                }
-                // Save supplier data to Clerk metadata
-                await updateUserMetadata({
-                    role: 'supplier' as AuthRole,
-                    companyName: companyName,
-                });
-
-                // Sync supplier profile to Supabase
-                if (clerkUser?.id) {
-                    const { error: dbError } = await supabase
-                        .from('suppliers')
-                        .upsert({
-                            id: clerkUser.id,
-                            name: companyName.trim(),
-                            contact_email: clerkUser.primaryEmailAddress?.emailAddress || null,
-                            updated_at: new Date().toISOString(),
-                        }, {
-                            onConflict: 'id'
-                        });
-
-                    if (dbError) {
-                        console.error('Failed to sync supplier to database:', dbError);
-                        // Don't block onboarding, but log the error
+                if (supplierSubMode === 'create') {
+                    if (!companyName.trim()) {
+                        toast.error('Please enter your company name');
+                        setIsSubmitting(false);
+                        return;
                     }
+                    // Save supplier data to Clerk metadata
+                    await updateUserMetadata({
+                        role: 'supplier' as AuthRole,
+                        companyName: companyName,
+                        businessId: clerkUser?.id || '',
+                    });
+
+                    // Sync supplier profile to Supabase
+                    if (clerkUser?.id) {
+                        const { error: dbError } = await supabase
+                            .from('suppliers')
+                            .upsert({
+                                id: clerkUser.id,
+                                name: companyName.trim(),
+                                contact_email: clerkUser.primaryEmailAddress?.emailAddress || null,
+                                updated_at: new Date().toISOString(),
+                            }, {
+                                onConflict: 'id'
+                            });
+
+                        if (dbError) throw dbError;
+                    }
+                } else if (supplierSubMode === 'join') {
+                    if (!companyName.trim()) {
+                        toast.error('Please select a company to join');
+                        setIsSubmitting(false);
+                        return;
+                    }
+
+                    // Find the existing business ID for this name
+                    const { data: existingBusiness } = await supabase
+                        .from('suppliers')
+                        .select('id')
+                        .eq('name', companyName.trim())
+                        .maybeSingle();
+
+                    if (!existingBusiness) {
+                        toast.error('The selected company no longer exists. Please create it instead.');
+                        setIsSubmitting(false);
+                        return;
+                    }
+
+                    // Save supplier data to Clerk metadata
+                    await updateUserMetadata({
+                        role: 'supplier' as AuthRole,
+                        companyName: companyName.trim(),
+                        businessId: existingBusiness.id,
+                    });
+
+                    // For joining, we DON'T create a new row in 'suppliers'
+                    // This avoids duplicating business entries.
                 }
 
                 toast.success('Welcome to DeliVeri!');
@@ -273,19 +338,107 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                     animate={{ opacity: 1, y: 0 }}
                     className="space-y-4 pt-4"
                 >
-                    <div className="space-y-2">
-                        <Label htmlFor="companyName" className="text-white flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-[#00d4aa]" />
-                            Company Name *
-                        </Label>
-                        <Input
-                            id="companyName"
-                            value={companyName}
-                            onChange={(e) => setCompanyName(e.target.value)}
-                            placeholder="Enter your company name"
-                            className="bg-white/5 border-white/10 text-white placeholder:text-[#55556a]"
-                        />
+                    <div className="grid grid-cols-2 gap-4 pb-2">
+                        <button
+                            onClick={() => {
+                                setSupplierSubMode('create');
+                                setCompanyName('');
+                            }}
+                            className={`p-4 rounded-lg border-2 text-center transition-all ${supplierSubMode === 'create'
+                                ? 'border-[#00d4aa] bg-[#00d4aa]/10 text-[#00d4aa]'
+                                : 'border-white/10 bg-white/5 text-[#9294a0] hover:border-white/20'
+                                }`}
+                        >
+                            Create New
+                        </button>
+                        <button
+                            onClick={() => {
+                                setSupplierSubMode('join');
+                                setCompanyName('');
+                                setSearchQuery('');
+                            }}
+                            className={`p-4 rounded-lg border-2 text-center transition-all ${supplierSubMode === 'join'
+                                ? 'border-[#00d4aa] bg-[#00d4aa]/10 text-[#00d4aa]'
+                                : 'border-white/10 bg-white/5 text-[#9294a0] hover:border-white/20'
+                                }`}
+                        >
+                            Join Existing
+                        </button>
                     </div>
+
+                    {supplierSubMode === 'create' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="companyName" className="text-white flex items-center gap-2">
+                                <Building2 className="w-4 h-4 text-[#00d4aa]" />
+                                Company Name *
+                            </Label>
+                            <Input
+                                id="companyName"
+                                value={companyName}
+                                onChange={(e) => setCompanyName(e.target.value)}
+                                placeholder="Enter your company name"
+                                className="bg-white/5 border-white/10 text-white placeholder:text-[#55556a]"
+                            />
+                        </div>
+                    )}
+
+                    {supplierSubMode === 'join' && (
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="searchSupplier" className="text-white flex items-center gap-2">
+                                    <Building2 className="w-4 h-4 text-[#00d4aa]" />
+                                    Search Company *
+                                </Label>
+                                <Input
+                                    id="searchSupplier"
+                                    value={searchQuery}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        searchSuppliers(e.target.value);
+                                    }}
+                                    placeholder="Search for an existing company..."
+                                    className="bg-white/5 border-white/10 text-white placeholder:text-[#55556a]"
+                                />
+                            </div>
+
+                            {isSearching ? (
+                                <div className="text-center py-2 text-sm text-[#9294a0]">Searching...</div>
+                            ) : existingSuppliers.length > 0 ? (
+                                <div className="space-y-2">
+                                    {existingSuppliers.map((s) => (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => {
+                                                setCompanyName(s.name);
+                                                setSearchQuery(s.name);
+                                                setExistingSuppliers([]);
+                                            }}
+                                            className={`w-full p-3 rounded-lg border text-left transition-all ${companyName === s.name
+                                                ? 'border-[#00d4aa] bg-[#00d4aa]/20 text-white'
+                                                : 'border-white/5 bg-white/[0.02] text-[#9294a0] hover:bg-white/5'
+                                                }`}
+                                        >
+                                            <div className="font-medium">{s.name}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : searchQuery && !isSearching ? (
+                                <div className="text-center py-2 text-sm text-[#9294a0]">No companies found</div>
+                            ) : null}
+
+                            {companyName && (
+                                <div className="p-3 rounded-lg bg-[#00d4aa]/10 border border-[#00d4aa]/20 flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-[#00d4aa] flex items-center justify-center">
+                                        <Check className="w-5 h-5 text-[#0a0a0f]" />
+                                    </div>
+                                    <div>
+                                        <div className="text-white text-sm font-medium">Selected: {companyName}</div>
+                                        <div className="text-[#9294a0] text-xs">You will join this supplier team</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </motion.div>
             )}
 
@@ -306,7 +459,7 @@ export default function RoleSelectStep({ onNext, onBack }: RoleSelectStepProps) 
                 </Button>
                 <Button
                     onClick={handleSubmit}
-                    disabled={!selectedRole || isSubmitting}
+                    disabled={!selectedRole || (selectedRole === 'supplier' && !supplierSubMode) || isSubmitting}
                     className={`px-6 py-5 text-white transition-all duration-300 ${selectedRole === 'restaurant'
                         ? 'bg-gradient-to-r from-[#009EE0] to-[#00B5FF] hover:shadow-[0_0_30px_rgba(0,158,224,0.3)]'
                         : selectedRole === 'supplier'

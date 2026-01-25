@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@clerk/clerk-react';
 import * as mock from '@/data/mockData';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -19,6 +20,7 @@ export interface Delivery {
     updated_at: string;
     restaurant_id: string | null;
     supplier_id?: string; // For mock mapping
+    last_action_by?: string | null;
 }
 
 export interface DeliveryItem {
@@ -408,6 +410,7 @@ export function useSupplierStats() {
  * Update delivery status (e.g., resolve an issue)
  */
 export function useUpdateDeliveryStatus() {
+    const { user } = useUser();
     const queryClient = useQueryClient();
     const supabase = useAuthenticatedSupabase();
 
@@ -421,7 +424,11 @@ export function useUpdateDeliveryStatus() {
         }) => {
             const { data, error } = await supabase
                 .from('deliveries')
-                .update({ status, updated_at: new Date().toISOString() })
+                .update({
+                    status,
+                    updated_at: new Date().toISOString(),
+                    last_action_by: user?.id
+                })
                 .eq('id', deliveryId)
                 .select()
                 .single();
@@ -653,9 +660,9 @@ export interface ConnectedRestaurantWithProfile extends ConnectedRestaurant {
  * Uses restaurant_supplier_connections table for proper connection tracking
  */
 export function useSupplierRestaurantsWithProfiles() {
-    const { user } = useUser();
+    const { user } = useAuth();
     const supabase = useAuthenticatedSupabase();
-    const supplierId = user?.id || '';
+    const supplierId = user?.businessId || '';
 
     return useQuery({
         queryKey: ['supplier-restaurants-profiles', supplierId],
@@ -767,10 +774,10 @@ export function useSupplierRestaurantsWithProfiles() {
  * Hook for managing incoming connection requests (for suppliers)
  */
 export function useConnectionRequests() {
-    const { user } = useUser();
+    const { user } = useAuth();
     const supabase = useAuthenticatedSupabase();
     const queryClient = useQueryClient();
-    const supplierId = user?.id || '';
+    const supplierId = user?.businessId || '';
 
     // Fetch pending connection requests
     const pendingRequestsQuery = useQuery({
@@ -817,7 +824,10 @@ export function useConnectionRequests() {
         mutationFn: async (connectionId: string) => {
             const { data, error } = await supabase
                 .from('restaurant_supplier_connections')
-                .update({ status: 'active' })
+                .update({
+                    status: 'active',
+                    last_action_by: user?.id
+                })
                 .eq('id', connectionId)
                 .select()
                 .single();

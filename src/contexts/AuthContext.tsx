@@ -8,6 +8,7 @@ export interface User {
   email: string;
   role: UserRole | null;
   companyName: string;
+  businessId: string;
   createdAt: Date;
 }
 
@@ -15,7 +16,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   logout: () => void;
-  updateUserMetadata: (metadata: { role?: UserRole; companyName?: string }) => Promise<void>;
+  updateUserMetadata: (metadata: { role?: UserRole; companyName?: string; businessId?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: clerkUser.primaryEmailAddress?.emailAddress || '',
       role: (clerkUser.unsafeMetadata?.role as UserRole) || (clerkUser.publicMetadata?.role as UserRole) || null,
       companyName: (clerkUser.unsafeMetadata?.companyName as string) || (clerkUser.publicMetadata?.companyName as string) || clerkUser.firstName || '',
+      businessId: (clerkUser.unsafeMetadata?.businessId as string) || (clerkUser.publicMetadata?.businessId as string) || clerkUser.id,
       createdAt: new Date(clerkUser.createdAt || Date.now()),
     }
     : null;
@@ -40,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut();
   };
 
-  const updateUserMetadata = async (metadata: { role?: UserRole; companyName?: string }) => {
+  const updateUserMetadata = async (metadata: { role?: UserRole; companyName?: string; businessId?: string }) => {
     if (!clerkUser) return;
 
     try {

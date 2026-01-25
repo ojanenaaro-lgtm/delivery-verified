@@ -21,11 +21,11 @@ export function useEnsureUserRecord() {
                 const table = user.role === 'supplier' ? 'suppliers' : 'restaurants';
                 console.log(`[AutoRepair] Checking ${table} record for user ${user.id}`);
 
-                // Check if record exists
+                // Check if the canonical business record exists
                 const { data, error } = await supabase
                     .from(table)
                     .select('id')
-                    .eq('id', user.id)
+                    .eq('id', user.businessId)
                     .maybeSingle();
 
                 if (error) {
@@ -34,13 +34,20 @@ export function useEnsureUserRecord() {
                 }
 
                 if (!data) {
-                    console.log(`[AutoRepair] Missing record detected. Creating...`);
-                    toast.info('Finalizing your account setup...');
+                    // Only the primary user (whose ID matches the businessId) should create the business record
+                    // In the Join flow, the businessId is already set to an existing record.
+                    if (user.businessId !== user.id) {
+                        console.log('[AutoRepair] Join detected. Waiting for owner to create record or business record exists under different ID.');
+                        return;
+                    }
+
+                    console.log(`[AutoRepair] Missing business record detected. Creating...`);
+                    toast.info('Finalizing your business account setup...');
 
                     // Create missing record
                     const { error: insertError } = await supabase.from(table).insert({
-                        id: user.id,
-                        name: user.companyName || 'My Restaurant', // Fallback name
+                        id: user.businessId,
+                        name: user.companyName || (user.role === 'supplier' ? 'New Supplier' : 'My Restaurant'),
                         created_at: new Date().toISOString(),
                         // Add table-specific defaults
                         ...(user.role === 'supplier' ? { is_major_tukku: false } : {

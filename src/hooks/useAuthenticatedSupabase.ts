@@ -20,6 +20,9 @@ export function useAuthenticatedSupabase(): SupabaseClient {
     }
 
     return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+      },
       global: {
         fetch: async (url, options = {}) => {
           // Get fresh Clerk token for each request

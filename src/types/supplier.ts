@@ -31,6 +31,7 @@ export interface MissingItemsReport {
   created_at: string;
   acknowledged_at: string | null;
   resolved_at: string | null;
+  last_action_by?: string | null;
 }
 
 export type SupplierConnectionStatus = 'pending' | 'active' | 'inactive';

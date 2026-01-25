@@ -65,7 +65,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
             created_at
           )
         `)
-        .eq('restaurant_id', user.id)
+        .eq('restaurant_id', user.businessId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -115,7 +115,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
       const { data: connections, error: connError } = await supabase
         .from('restaurant_supplier_connections')
         .select('supplier_id')
-        .eq('restaurant_id', user.id);
+        .eq('restaurant_id', user.businessId);
 
       if (connError) throw connError;
 
@@ -131,8 +131,17 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
 
       if (error) throw error;
 
-      // Filter out connected suppliers in JS instead of SQL (more reliable)
-      const available = (data || []).filter(s => !connectedIds.includes(s.id));
+      // Filter and deduplicate by name (only show one entry per business)
+      const available: Supplier[] = [];
+      const seenNames = new Set();
+      const connectedNames = new Set(connectedSuppliers.map(c => c.supplier?.name));
+
+      for (const s of (data || [])) {
+        if (!connectedIds.includes(s.id) && !connectedNames.has(s.name) && !seenNames.has(s.name)) {
+          available.push(s);
+          seenNames.add(s.name);
+        }
+      }
 
       setAvailableSuppliers(available);
     } catch (error) {
@@ -152,7 +161,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
       const { data, error } = await supabase
         .from('missing_items_reports')
         .select('*')
-        .eq('restaurant_id', user.id)
+        .eq('restaurant_id', user.businessId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -178,7 +187,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
       const { data: existing, error: checkError } = await supabase
         .from('restaurant_supplier_connections')
         .select('id, status')
-        .eq('restaurant_id', user.id)
+        .eq('restaurant_id', user.businessId)
         .eq('supplier_id', supplierId)
         .maybeSingle();
 
@@ -200,7 +209,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
         const { error: ensureError } = await supabase
           .from('restaurants')
           .upsert({
-            id: user.id,
+            id: user.businessId,
             name: user.companyName || 'My Restaurant',
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id', ignoreDuplicates: true });
@@ -215,9 +224,10 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
       const { error: insertError } = await supabase
         .from('restaurant_supplier_connections')
         .insert({
-          restaurant_id: user.id,
+          restaurant_id: user.businessId,
           supplier_id: supplierId,
           status: 'pending',
+          last_action_by: user.id
         });
 
       if (insertError) throw insertError;
@@ -267,7 +277,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
           event: '*',
           schema: 'public',
           table: 'restaurant_supplier_connections',
-          filter: `restaurant_id=eq.${user.id}`,
+          filter: `restaurant_id=eq.${user.businessId}`,
         },
         () => {
           fetchConnectedSuppliers();
@@ -280,7 +290,7 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
           event: '*',
           schema: 'public',
           table: 'missing_items_reports',
-          filter: `restaurant_id=eq.${user.id}`,
+          filter: `restaurant_id=eq.${user.businessId}`,
         },
         () => {
           fetchMissingReports();
