@@ -39,7 +39,11 @@ import {
 
 const queryClient = new QueryClient();
 
+import { useEnsureUserRecord } from '@/hooks/useEnsureUserRecord';
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  useEnsureUserRecord(); // Run auto-repair on all protected routes
+
   return (
     <>
       <SignedIn>{children}</SignedIn>

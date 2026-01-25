@@ -194,6 +194,23 @@ export function useSupplierConnections(): UseSupplierConnectionsReturn {
         // If inactive, we could reactivate - for now just create new
       }
 
+      // CRITICAL FIX: Ensure restaurant record exists before connecting
+      // This prevents the 409 Foreign Key violation if the auto-repair hook missed it.
+      if (user.role === 'restaurant') {
+        const { error: ensureError } = await supabase
+          .from('restaurants')
+          .upsert({
+            id: user.id,
+            name: user.companyName || 'My Restaurant',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id', ignoreDuplicates: true });
+
+        if (ensureError) {
+          console.error('[SupplierConnections] JIT Restaurant Creation failed:', ensureError);
+          // We continue anyway, hoping it exists despite error (e.g. RLS blocking update but allowing select?)
+        }
+      }
+
       // Create new connection with pending status
       const { error: insertError } = await supabase
         .from('restaurant_supplier_connections')
