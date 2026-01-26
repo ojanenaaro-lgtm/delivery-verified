@@ -16,6 +16,9 @@ import {
     RefreshCw,
     MessageSquareWarning,
     Inbox,
+    Truck,
+    Image,
+    ExternalLink,
 } from 'lucide-react';
 import MainContent from '@/components/layout/MainContent';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,6 +66,7 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { OrderResolutionSheet } from '@/components/supplier/OrderResolutionSheet';
 
 type TabValue = 'all' | ReportStatus;
 
@@ -75,6 +79,8 @@ export default function DeliveryIssues() {
     // Dialog states
     const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
     const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
+    const [resolutionSheetOpen, setResolutionSheetOpen] = useState(false);
+    const [reportForResolution, setReportForResolution] = useState<MissingItemsReportWithRestaurant | null>(null);
     const [resolutionType, setResolutionType] = useState<ResolutionType>('redelivery_scheduled');
     const [resolutionNote, setResolutionNote] = useState('');
     const [disputeReason, setDisputeReason] = useState<DisputeReason>('items_delivered');
@@ -208,6 +214,12 @@ export default function DeliveryIssues() {
         setDisputeDialogOpen(true);
     };
 
+    const handleOpenResolutionSheet = (report: MissingItemsReportWithRestaurant, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setReportForResolution(report);
+        setResolutionSheetOpen(true);
+    };
+
     const handleDispute = async () => {
         if (!selectedReportId) return;
         try {
@@ -320,6 +332,7 @@ export default function DeliveryIssues() {
                                     onAcknowledge={(e) => handleAcknowledge(report.id, e)}
                                     onResolve={(e) => handleOpenResolveDialog(report.id, e)}
                                     onDispute={(e) => handleOpenDisputeDialog(report.id, e)}
+                                    onSendItems={(e) => handleOpenResolutionSheet(report, e)}
                                     isAcknowledging={acknowledgeReport.isPending}
                                 />
                             ))}
@@ -475,6 +488,13 @@ export default function DeliveryIssues() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Order Resolution Sheet for Sending Items */}
+            <OrderResolutionSheet
+                open={resolutionSheetOpen}
+                onOpenChange={setResolutionSheetOpen}
+                report={reportForResolution}
+            />
         </MainContent>
     );
 }
@@ -488,6 +508,7 @@ interface ReportCardProps {
     onAcknowledge: (e: React.MouseEvent) => void;
     onResolve: (e: React.MouseEvent) => void;
     onDispute: (e: React.MouseEvent) => void;
+    onSendItems: (e: React.MouseEvent) => void;
     isAcknowledging: boolean;
 }
 
@@ -499,6 +520,7 @@ function ReportCard({
     onAcknowledge,
     onResolve,
     onDispute,
+    onSendItems,
     isAcknowledging,
 }: ReportCardProps) {
     return (
@@ -578,6 +600,7 @@ function ReportCard({
                         status={report.status}
                         onResolve={onResolve}
                         onDispute={onDispute}
+                        onSendItems={onSendItems}
                     />
                 </CollapsibleContent>
             </Card>
@@ -591,9 +614,10 @@ interface ReportDetailsProps {
     status: ReportStatus;
     onResolve: (e: React.MouseEvent) => void;
     onDispute: (e: React.MouseEvent) => void;
+    onSendItems: (e: React.MouseEvent) => void;
 }
 
-function ReportDetails({ reportId, status, onResolve, onDispute }: ReportDetailsProps) {
+function ReportDetails({ reportId, status, onResolve, onDispute, onSendItems }: ReportDetailsProps) {
     const { data, isLoading } = useSupplierReportDetails(reportId);
 
     if (isLoading) {
@@ -677,6 +701,43 @@ function ReportDetails({ reportId, status, onResolve, onDispute }: ReportDetails
                                     <span className="ml-2 font-medium">{data.delivery.order_number}</span>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Original Receipt Image */}
+                {data.delivery?.receipt_image_url && (
+                    <div className="p-4 bg-muted/30 rounded-lg">
+                        <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                            <Image className="w-4 h-4" />
+                            Original Receipt
+                        </h4>
+                        <div className="space-y-3">
+                            <a
+                                href={data.delivery.receipt_image_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block"
+                            >
+                                <img
+                                    src={data.delivery.receipt_image_url}
+                                    alt="Original receipt"
+                                    className="max-w-full max-h-96 rounded-lg border border-border object-contain bg-white"
+                                    onError={(e) => {
+                                        // Hide if image fails to load
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                />
+                            </a>
+                            <a
+                                href={data.delivery.receipt_image_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-sm text-[#009EE0] hover:underline"
+                            >
+                                <ExternalLink className="w-4 h-4" />
+                                View full size
+                            </a>
                         </div>
                     </div>
                 )}
@@ -770,8 +831,16 @@ function ReportDetails({ reportId, status, onResolve, onDispute }: ReportDetails
                     {status === 'acknowledged' && (
                         <>
                             <Button
+                                onClick={onSendItems}
+                                className="bg-[#009EE0] hover:bg-[#0088C4]"
+                            >
+                                <Truck className="w-4 h-4 mr-2" />
+                                Send Items
+                            </Button>
+                            <Button
                                 onClick={onResolve}
-                                className="bg-green-600 hover:bg-green-700"
+                                variant="outline"
+                                className="border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700"
                             >
                                 <Check className="w-4 h-4 mr-2" />
                                 Mark Resolved

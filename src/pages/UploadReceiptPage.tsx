@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Loader2, CheckCircle, AlertTriangle, Calendar, Building2, FileText, Star, ExternalLink } from 'lucide-react';
-import { useSession } from '@clerk/clerk-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
@@ -16,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
+import { useReceiptImageUpload } from '@/hooks/useReceiptImageUpload';
 import { Delivery } from '@/types/delivery';
 import { useMissingItemsReport } from '@/hooks/useMissingItemsReport';
 
@@ -72,7 +72,6 @@ const filterNonProducts = (items: ScannedItem[]): ScannedItem[] => {
 
 export default function UploadReceiptPage() {
   const { user } = useAuth();
-  const { session } = useSession();
   const navigate = useNavigate();
   const { deliveryId } = useParams();
   const supabase = useAuthenticatedSupabase();
@@ -98,9 +97,11 @@ export default function UploadReceiptPage() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [createdReportId, setCreatedReportId] = useState<string | null>(null);
+  const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
 
-  // Missing items report hook
+  // Hooks
   const { createReport, isCreatingReport } = useMissingItemsReport();
+  const { uploadReceiptImage } = useReceiptImageUpload();
 
   // Real progress based on pages completed + small initial boost for perceived speed
   useEffect(() => {
@@ -257,6 +258,19 @@ export default function UploadReceiptPage() {
     setPagesCompleted(0);
     setTotalPages(0);
     setScanResult(null);
+    setReceiptImageUrl(null);
+
+    // Upload receipt image to storage first (non-blocking on failure)
+    try {
+      const result = await uploadReceiptImage(file);
+      setReceiptImageUrl(result.publicUrl);
+    } catch (err) {
+      console.warn('Could not save receipt image to storage:', err);
+      toast.warning('Could not save receipt image', {
+        description: 'Verification will continue, but image won\'t be saved for reference',
+      });
+      // Continue with AI processing anyway
+    }
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     if (!supabaseUrl) {
@@ -405,6 +419,7 @@ export default function UploadReceiptPage() {
       total_value: totalValue,
       missing_value: missingValue,
       status: finalStatus,
+      receipt_image_url: receiptImageUrl,
     };
 
     // Upsert Delivery
@@ -547,6 +562,7 @@ export default function UploadReceiptPage() {
     setItems([]);
     setError(null);
     setExistingDeliveryId(null);
+    setReceiptImageUrl(null);
   };
 
   return (

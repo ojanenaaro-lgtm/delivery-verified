@@ -45,6 +45,7 @@ export interface DeliveryInfo {
     id: string;
     delivery_date: string;
     order_number: string | null;
+    receipt_image_url: string | null;
 }
 
 export interface MissingItemsReportWithRestaurant extends MissingItemsReport {
@@ -262,7 +263,7 @@ export function useSupplierReportDetails(reportId: string | undefined) {
             if (report.delivery_id) {
                 const { data: deliveryData, error: deliveryError } = await supabase
                     .from('deliveries')
-                    .select('id, delivery_date, order_number')
+                    .select('id, delivery_date, order_number, receipt_image_url')
                     .eq('id', report.delivery_id)
                     .single();
 
