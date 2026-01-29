@@ -47,12 +47,11 @@ export interface Product {
 }
 
 export interface SupplierStats {
-    totalDeliveries: number;
-    pendingDeliveries: number;
-    activeDeliveries: number;
-    openIssues: number;
     uniqueRestaurants: number;
-    totalRevenue: number;
+    needsAction: number;      // Missing items reports awaiting response
+    inTransit: number;        // Outgoing deliveries on the way
+    completed: number;        // Outgoing deliveries that arrived
+    totalDeliveries: number;  // Keep for reference
 }
 
 // ============ DELIVERIES (Orders from restaurants) ============
@@ -356,51 +355,69 @@ export function useSupplierRestaurants() {
 export function useSupplierStats() {
     const { user } = useUser();
     const supabase = useAuthenticatedSupabase();
-    const supplierName = (user?.publicMetadata?.companyName || user?.unsafeMetadata?.companyName || 'Kespro') as string;
+    const supplierId = user?.publicMetadata?.businessId || user?.unsafeMetadata?.businessId || user?.id;
 
     return useQuery({
-        queryKey: ['supplier-stats', supplierName],
+        queryKey: ['supplier-stats', supplierId],
         queryFn: async () => {
-            const { data, error } = await supabase
+            // 1. Get unique restaurants from deliveries
+            const { data: deliveries, error: deliveriesError } = await supabase
                 .from('deliveries')
-                .select('id, user_id, status, total_value, missing_value')
-                .eq('supplier_name', supplierName);
+                .select('user_id')
+                .eq('supplier_id', supplierId);
 
-            if (error) throw error;
+            if (deliveriesError) throw deliveriesError;
 
-            const deliveries = data || [];
+            const uniqueRestaurants = new Set(deliveries?.map((d) => d.user_id) || []).size;
 
-            // Fallback to mock stats if no real deliveries
-            if (deliveries.length === 0) {
-                const mockSupplier = mock.MOCK_SUPPLIERS.find(s => s.name.toLowerCase().includes(supplierName.toLowerCase()));
-                if (mockSupplier) {
-                    const mockStats = mock.getSupplierStats(mockSupplier.id);
-                    return {
-                        totalDeliveries: mockStats.totalOrders,
-                        pendingDeliveries: mockStats.pendingOrders,
-                        activeDeliveries: mockStats.deliveriesInTransit,
-                        openIssues: mockStats.openIssues,
-                        uniqueRestaurants: mockStats.connectedRestaurants,
-                        totalRevenue: mockStats.totalRevenue,
-                    };
+            // 2. Get needs action count (missing items reports not yet resolved)
+            const { count: needsActionCount, error: reportsError } = await supabase
+                .from('missing_items_reports')
+                .select('*', { count: 'exact', head: true })
+                .eq('supplier_id', supplierId)
+                .in('status', ['pending', 'acknowledged']);
+
+            if (reportsError) throw reportsError;
+
+            // 3. Get in transit count (outgoing deliveries on the way)
+            let inTransitCount = 0;
+            let completedCount = 0;
+
+            // Check if outgoing_deliveries table exists by trying to query it
+            try {
+                const { count: transitCount, error: transitError } = await supabase
+                    .from('outgoing_deliveries')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('supplier_id', supplierId)
+                    .in('status', ['pending', 'in_transit']);
+
+                if (!transitError) {
+                    inTransitCount = transitCount || 0;
                 }
+
+                // 4. Get completed count (outgoing deliveries arrived)
+                const { count: doneCount, error: doneError } = await supabase
+                    .from('outgoing_deliveries')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('supplier_id', supplierId)
+                    .in('status', ['delivered', 'confirmed']);
+
+                if (!doneError) {
+                    completedCount = doneCount || 0;
+                }
+            } catch {
+                // Table doesn't exist yet, keep counts at 0
             }
 
-            const stats: SupplierStats = {
-                totalDeliveries: deliveries.length,
-                pendingDeliveries: deliveries.filter((d) => d.status === 'draft').length,
-                activeDeliveries: deliveries.filter(
-                    (d) => d.status === 'complete' || d.status === 'pending_redelivery'
-                ).length,
-                openIssues: deliveries.filter((d) => d.status === 'pending_redelivery').length,
-                uniqueRestaurants: new Set(deliveries.map((d) => d.user_id)).size,
-                totalRevenue: deliveries
-                    .filter((d) => d.status === 'complete' || d.status === 'resolved')
-                    .reduce((sum, d) => sum + (Number(d.total_value) || 0), 0),
-            };
-
-            return stats;
+            return {
+                uniqueRestaurants,
+                needsAction: needsActionCount || 0,
+                inTransit: inTransitCount,
+                completed: completedCount,
+                totalDeliveries: deliveries?.length || 0,
+            } as SupplierStats;
         },
+        enabled: !!supplierId,
     });
 }
 

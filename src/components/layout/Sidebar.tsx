@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 interface MenuItem {
     icon: LucideIcon;
@@ -84,8 +85,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex flex-col h-full bg-card border-r border-border">
             {/* App Header - Simplified */}
             <div className="p-6 pb-2">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center justify-between mb-1">
                     <Logo size="md" showSubtitle={false} />
+                    <NotificationBell />
                 </div>
 
                 {/* Minimal Role Badge */}

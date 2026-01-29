@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Check, X, Loader2, Building2, Truck, Clock } from 'lucide-react';
+import { UserPlus, Check, X, Loader2, Building2, Truck, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -132,7 +132,7 @@ export function ConnectionRequestInbox() {
           size="icon"
           className="relative text-muted-foreground hover:text-foreground"
         >
-          <Bell className="w-5 h-5" />
+          <UserPlus className="w-5 h-5" />
           {pendingCount > 0 && (
             <Badge
               className="absolute -top-1 -right-1 h-5 min-w-[20px] flex items-center justify-center p-0 text-xs bg-[#009EE0] text-white border-0"
@@ -145,7 +145,7 @@ export function ConnectionRequestInbox() {
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Bell className="w-5 h-5 text-[#009EE0]" />
+            <UserPlus className="w-5 h-5 text-[#009EE0]" />
             Connection Requests
           </SheetTitle>
           <SheetDescription>
@@ -161,7 +161,7 @@ export function ConnectionRequestInbox() {
           ) : pendingRequests.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#009EE0]/10 flex items-center justify-center">
-                <Bell className="w-8 h-8 text-[#009EE0]" />
+                <UserPlus className="w-8 h-8 text-[#009EE0]" />
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">No pending requests</h3>
               <p className="text-sm text-muted-foreground">

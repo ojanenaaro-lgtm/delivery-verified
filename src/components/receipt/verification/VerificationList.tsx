@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 import { ScannedItem } from '../ScannedItemsTable';
 import { SwipeableItemRow } from './SwipeableItemRow';
 import { MissingItemSheet } from './MissingItemSheet';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
 interface VerificationListProps {
     items: ScannedItem[];

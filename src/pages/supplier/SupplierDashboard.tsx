@@ -12,7 +12,9 @@ import {
     Wifi,
     WifiOff,
     MapPin,
-    TrendingUp
+    TrendingUp,
+    CheckCircle,
+    Truck
 } from 'lucide-react';
 import MainContent from '@/components/layout/MainContent';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,9 +86,6 @@ export default function SupplierDashboard() {
         }
     }, [lastEvent, navigate]);
 
-    // Calculate today's active orders
-    const todayOrders = stats?.activeDeliveries || 0;
-
     return (
         <MainContent>
             <div className="max-w-7xl mx-auto">
@@ -143,60 +142,103 @@ export default function SupplierDashboard() {
                     </div>
                 </div>
 
-                {/* Summary Stats - Top Row */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
+                {/* Stats Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    {/* Restaurants */}
                     <Card className="border-border shadow-sm">
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between mb-2">
                                 <Users className="w-5 h-5 text-[#009EE0]" />
-                                <span className="text-xs text-muted-foreground">Connected</span>
                             </div>
                             {statsLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                             ) : (
                                 <>
-                                    <p className="text-2xl font-bold text-foreground">{stats?.uniqueRestaurants || 0}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Total Restaurants</p>
+                                    <p className="text-2xl font-bold text-foreground">
+                                        {stats?.uniqueRestaurants || 0}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">Restaurants</p>
                                 </>
                             )}
                         </CardContent>
                     </Card>
 
-                    <Card className="border-border shadow-sm">
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <Package className="w-5 h-5 text-[#009EE0]" />
-                                <span className="text-xs text-muted-foreground">Today</span>
-                            </div>
-                            {statsLoading ? (
-                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                            ) : (
-                                <>
-                                    <p className="text-2xl font-bold text-foreground">{todayOrders}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Active Orders Today</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className={cn(
-                        "border-border shadow-sm transition-all",
-                        newReportsCount > 0 && "ring-2 ring-red-500 ring-offset-2"
-                    )}>
+                    {/* Needs Action - RED when > 0 */}
+                    <Card
+                        className={cn(
+                            "border-border shadow-sm cursor-pointer hover:shadow-md transition-shadow",
+                            (stats?.needsAction || 0) > 0 && "border-red-200 bg-red-50/50"
+                        )}
+                        onClick={() => navigate('/supplier/issues')}
+                    >
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between mb-2">
                                 <AlertTriangle className={cn(
-                                    "w-5 h-5 text-red-500",
-                                    newReportsCount > 0 && "animate-pulse"
+                                    "w-5 h-5",
+                                    (stats?.needsAction || 0) > 0 ? "text-red-500" : "text-muted-foreground"
                                 )} />
-                                <span className="text-xs text-muted-foreground">Open</span>
+                                {(stats?.needsAction || 0) > 0 && (
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                    </span>
+                                )}
                             </div>
                             {statsLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                             ) : (
                                 <>
-                                    <p className="text-2xl font-bold text-foreground">{stats?.openIssues || 0}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Pending Issues</p>
+                                    <p className={cn(
+                                        "text-2xl font-bold",
+                                        (stats?.needsAction || 0) > 0 ? "text-red-600" : "text-foreground"
+                                    )}>
+                                        {stats?.needsAction || 0}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">Needs Action</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* In Transit */}
+                    <Card
+                        className="border-border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => navigate('/supplier/deliveries')}
+                    >
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <Truck className="w-5 h-5 text-[#009EE0]" />
+                            </div>
+                            {statsLoading ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <p className="text-2xl font-bold text-foreground">
+                                        {stats?.inTransit || 0}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">In Transit</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Completed */}
+                    <Card
+                        className="border-border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => navigate('/supplier/deliveries')}
+                    >
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <CheckCircle className="w-5 h-5 text-green-500" />
+                            </div>
+                            {statsLoading ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <p className="text-2xl font-bold text-green-600">
+                                        {stats?.completed || 0}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">Completed</p>
                                 </>
                             )}
                         </CardContent>

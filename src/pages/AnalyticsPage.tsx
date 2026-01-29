@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import MainContent from '@/components/layout/MainContent';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Download, TrendingUp, TrendingDown, Euro, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthenticatedSupabase } from '@/hooks/useAuthenticatedSupabase';
@@ -104,11 +104,6 @@ export default function AnalyticsPage() {
       ...data,
     }));
   }, [deliveries]);
-
-  // Discrepancy types (static for now as we don't track types)
-  const discrepancyTypes = [
-    { name: 'Missing Items', value: discrepancyCount > 0 ? 100 : 0, color: 'hsl(var(--destructive))' },
-  ];
 
   if (isLoading) {
     return (

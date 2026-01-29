@@ -15,7 +15,7 @@ type OnboardingPhase = 'welcome' | 'features' | 'role-select' | 'success';
 
 export default function OnboardingPage() {
     const navigate = useNavigate();
-    const { user, updateUserMetadata } = useAuth();
+    const { user } = useAuth();
     const [phase, setPhase] = useState<OnboardingPhase>('welcome');
     const [featureIndex, setFeatureIndex] = useState(0);
     const [userName, setUserName] = useState('');
